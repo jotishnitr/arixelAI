@@ -23,7 +23,7 @@ export default function Login({ setCurrentPage }) {
     async function handleSubmit(event) {
         event.preventDefault();
         try {
-            const response = await fetch("http://localhost:5000/auth/login", {
+            const response = await fetch("https://arixelai.onrender.com/auth/login", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -154,7 +154,7 @@ export default function Login({ setCurrentPage }) {
 
                     <a
                         className="social-btn google-btn"
-                        href="http://localhost:5000/auth/google"
+                        href="https://arixelai.onrender.com/auth/google"
                     >
                         <svg
                             className="google-icon"

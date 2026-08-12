@@ -228,7 +228,7 @@ export default function Register({ setCurrentPage }) {
 
           <a
             className="social-btn google-btn"
-            href="http://localhost:5000/auth/google"
+            href="https://arixelai.onrender.com/auth/google"
           >
             <svg
               className="google-icon"

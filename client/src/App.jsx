@@ -9,7 +9,7 @@ export default function App() {
 
   useEffect(() => {
     async function verification() {
-      const response = await fetch("http://localhost:5000/verify/verify", {
+      const response = await fetch("https://arixelai.onrender.com/verify/verify", {
         method: "GET",
         headers: {
           "Content-Type": "application/json",

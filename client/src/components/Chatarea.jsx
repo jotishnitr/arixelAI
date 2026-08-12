@@ -89,7 +89,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
         setSelectedFile(null);
         setShowPopup(false);
 
-        const response = await fetch("http://localhost:5000/api/postChat", {
+        const response = await fetch("https://arixelai.onrender.com/api/postChat", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -113,7 +113,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
     }
 
     async function getChatHistory() {
-        const response = await fetch("http://localhost:5000/api/getChatHistory", {
+        const response = await fetch("https://arixelai.onrender.com/api/getChatHistory", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"

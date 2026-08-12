@@ -12,7 +12,7 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
     async function getContextHistory() {
       try {
         const response = await fetch(
-          "http://localhost:5000/api/getChatContextHistory",
+          "https://arixelai.onrender.com/api/getChatContextHistory",
           {
             method: "GET",
             credentials: "include",
