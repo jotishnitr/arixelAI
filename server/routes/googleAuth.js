@@ -3,7 +3,7 @@ const passport = require("passport");
 
 const router = express.Router();
 
-const { CORS_ORIGIN } = process.env;
+const CORS_ORIGIN = process.env.CORS_ORIGIN || (process.env.NODE_ENV === "production" ? "https://jotishnitr.github.io" : "http://localhost:5173");
 
 router.get(
     "/google",
