@@ -66,7 +66,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
 
     useEffect(() => {
         if (context) {
-            getChatHistory();
+            getChatHistory(context);
         }
     }, [context]);
 
@@ -107,24 +107,36 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
         const data = await response.json();
         if (response.ok) {
             setContext(data.context);
-            getChatHistory();
+            getChatHistory(data.context);
         }
 
     }
 
-    async function getChatHistory() {
-        const response = await fetch("https://arixelai.onrender.com/api/getChatHistory", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            credentials: "include",
-            body: JSON.stringify({
-                context,
-            })
-        })
-        const data = await response.json();
-        setChatHistory(data.messages);
+    async function getChatHistory(currentContext) {
+        const activeContext = currentContext || context;
+        if (!activeContext) return;
+        
+        try {
+            const response = await fetch("https://arixelai.onrender.com/api/getChatHistory", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                credentials: "include",
+                body: JSON.stringify({
+                    context: activeContext,
+                })
+            });
+            const data = await response.json();
+            if (response.ok && data && data.messages) {
+                setChatHistory(data.messages);
+            } else {
+                setChatHistory([]);
+            }
+        } catch (error) {
+            console.error("Error fetching chat history:", error);
+            setChatHistory([]);
+        }
     }
 
     return (
