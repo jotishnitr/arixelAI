@@ -1,4 +1,10 @@
 node_modules/
-client/node_modules/
+**/node_modules/
+
 dist/
+**/dist/
+
 .env
+**/.env
+
+.vscode/
