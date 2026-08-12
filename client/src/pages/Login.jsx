@@ -22,6 +22,8 @@ export default function Login({ setCurrentPage }) {
 
     async function handleSubmit(event) {
         event.preventDefault();
+        setLoading(true);
+        setError("");
         try {
             const response = await fetch("https://arixelai.onrender.com/auth/login", {
                 method: "POST",
@@ -32,11 +34,15 @@ export default function Login({ setCurrentPage }) {
                 body: JSON.stringify(formData),
             });
             const data = await response.json();
-            if (data.success) {
+            if (response.ok && data.success) {
                 setCurrentPage("homePage");
+            } else {
+                setError(data.message || "Invalid email or password");
             }
         } catch (error) {
-            setError(error.message);
+            setError(error.message || "Something went wrong. Please try again.");
+        } finally {
+            setLoading(false);
         }
     }
 

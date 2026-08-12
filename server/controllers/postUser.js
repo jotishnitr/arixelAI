@@ -6,25 +6,23 @@ const postUser = async (req, res) => {
         const { name, email, password } = req.body;
         const user = await User.findOne({ email });
         if (user) {
-            res.status(200).json({
-                message: "User already exist"
-            })
+            return res.status(400).json({
+                message: "User already exists"
+            });
         }
-        else {
-            const salt = await bcrypt.genSalt(10)
-            const hashedPassword = await bcrypt.hash(password, salt)
-            const userId = crypto.randomUUID();
-            await User.create({
-                userId,
-                name,
-                email,
-                password: hashedPassword,
-            })
-            res.status(200).json({
-                message: "User created successfully",
-
-            })
-        }
+        
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+        const userId = crypto.randomUUID();
+        await User.create({
+            userId,
+            name,
+            email,
+            password: hashedPassword,
+        });
+        return res.status(201).json({
+            message: "User created successfully",
+        });
     }
     catch (err) {
         console.error(err);

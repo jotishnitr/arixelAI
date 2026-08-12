@@ -22,10 +22,37 @@ export default function Register({ setCurrentPage }) {
     }));
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
-    setCurrentPage("Login");
-
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("https://arixelai.onrender.com/api/postUser", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+        }),
+      });
+      const data = await response.json();
+      if (response.ok && data.message === "User created successfully") {
+        setCurrentPage("Login");
+      } else {
+        setError(data.message || "Registration failed");
+      }
+    } catch (err) {
+      setError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
