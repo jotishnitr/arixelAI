@@ -1,6 +1,6 @@
 import Sidebar from "../components/Sidebar";
 import Chatarea from "../components/Chatarea";
-import Profile from "./profile";
+import Profile from "./ProfileModal";
 import { useState } from "react";
 export default function Homepage() {
   const [context, setContext] = useState("");
