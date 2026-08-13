@@ -24,6 +24,9 @@
     width: 100%;
     margin: 0 auto;
     text-align: center;
+    overflow-y: auto;
+    max-height: 100%;
+    padding: 10px 0;
 }
 
 .logo-display-container {
@@ -381,6 +384,17 @@
     box-sizing: border-box;
 }
 
+.chat-bubble ul,
+.chat-bubble ol {
+    padding-left: 20px;
+    margin: 8px 0;
+}
+
+.chat-bubble li {
+    margin-bottom: 6px;
+}
+
+
 .user-bubble {
     background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
     color: #FFFFFF;
@@ -571,4 +585,84 @@
 .remove-file-btn:hover {
     background-color: rgba(239, 68, 68, 0.25);
     color: #f87171;
+}
+
+/* Responsiveness & Collapsible Sidebar */
+.mobile-sidebar-toggle {
+    display: none; /* Hidden on desktop */
+}
+
+@media (max-width: 768px) {
+    .chat-content-area {
+        margin-left: 0 !important;
+        width: 100% !important;
+        padding: 85px 16px 20px 16px;
+    }
+
+    .mobile-sidebar-toggle {
+        display: flex;
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid rgba(208, 188, 255, 0.15);
+        backdrop-filter: blur(12px);
+        color: #FFFFFF;
+        width: 42px;
+        height: 42px;
+        border-radius: 10px;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 1001;
+        transition: all 0.2s ease;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .mobile-sidebar-toggle:hover {
+        background: rgba(15, 23, 42, 0.95);
+        border-color: rgba(208, 188, 255, 0.35);
+        transform: scale(1.05);
+    }
+
+    .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(4px);
+        z-index: 1999; /* Below sidebar (2000), above chat content area */
+    }
+
+    .suggestions-container {
+        grid-template-columns: 1fr !important;
+        gap: 12px;
+    }
+
+    .welcome-text-container h1 {
+        font-size: 24px !important;
+        line-height: 1.3;
+    }
+
+    .hero-container {
+        padding: 0 10px;
+        text-align: center;
+        justify-content: flex-start !important;
+    }
+
+    .chat-messages-container {
+        max-width: 100% !important;
+        padding: 0 8px;
+    }
+
+    .chat-bubble {
+        max-width: 85% !important;
+    }
+
+    .chat-input-wrapper {
+        max-width: 100% !important;
+        margin: 0 10px;
+    }
 }

@@ -2,9 +2,7 @@ import { useState, useEffect } from "react";
 import profileIcon from "../assets/profile.png";
 import "./Profile.css";
 
-const API_BASE_URL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-    ? "http://localhost:5000"
-    : "https://arixelai.onrender.com";
+const API_BASE_URL = "https://arixelai.onrender.com";
 
 export default function Profile({ setCurrentState }) {
     const [profileState, setProfileState] = useState("display");
@@ -84,7 +82,13 @@ export default function Profile({ setCurrentState }) {
                     </div>
 
                     <div className="profile-avatar-container">
-                        <img src={profileIcon} alt="Profile Avatar" className="profile-avatar" />
+                        {name ? (
+                            <div className="profile-initial-avatar">
+                                {name.charAt(0).toUpperCase()}
+                            </div>
+                        ) : (
+                            <img src={profileIcon} alt="Profile Avatar" className="profile-avatar" />
+                        )}
                     </div>
 
                     <form className="profile-form" onSubmit={handleSubmit}>
@@ -158,12 +162,17 @@ export default function Profile({ setCurrentState }) {
                     </div>
 
                     <div className="profile-avatar-container">
-                        <img src={profileIcon} alt="Profile Avatar" className="profile-avatar" />
+                        {name ? (
+                            <div className="profile-initial-avatar">
+                                {name.charAt(0).toUpperCase()}
+                            </div>
+                        ) : (
+                            <img src={profileIcon} alt="Profile Avatar" className="profile-avatar" />
+                        )}
                     </div>
 
                     <div className="profile-info-display">
-                        <h3 className="profile-display-name">{name || "Alex"}</h3>
-                        <p className="profile-display-email">{email}</p>
+                        <h2 className="profile-display-name">{name || "Alex"}</h2>
 
                         <div className="profile-details-grid">
                             <div className="profile-detail-item">
@@ -173,6 +182,10 @@ export default function Profile({ setCurrentState }) {
                             <div className="profile-detail-item">
                                 <span className="detail-label">Country</span>
                                 <span className="detail-value">{country || "Not set"}</span>
+                            </div>
+                            <div className="profile-detail-item col-span-2">
+                                <span className="detail-label">Email Address</span>
+                                <span className="detail-value">{email}</span>
                             </div>
                             <div className="profile-detail-item col-span-2">
                                 <span className="detail-label">Mobile Number</span>

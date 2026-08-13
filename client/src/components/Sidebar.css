@@ -267,3 +267,15 @@
   transform: scale(1.1);
   filter: drop-shadow(0 0 6px rgba(160, 120, 255, 0.6));
 }
+
+@media (max-width: 768px) {
+  .sidebar-section {
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 2000;
+    box-shadow: 5px 0 25px rgba(0, 0, 0, 0.5);
+  }
+  .sidebar-section.open {
+    transform: translateX(0);
+  }
+}

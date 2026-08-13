@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import { useState, useEffect, useRef } from "react"
 import "./Chatarea.css"
 import Markdown from "react-markdown"
-export default function Chatarea({ setContext, context, currentState, setCurrentState }) {
+export default function Chatarea({ setContext, context, currentState, setCurrentState, currentContext, setCurrentContext, getContextHistory, isSidebarOpen, setIsSidebarOpen }) {
 
     const [chatInput, setChatInput] = useState("");
 
@@ -20,6 +20,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
     const [showPopup, setShowPopup] = useState(false);
     const [filePreview, setFilePreview] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
+    const [name, setName] = useState("");
 
     function previewFile(e) {
         const file = e.target.files[0];
@@ -57,6 +58,20 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
         }
     }, [chatInput]);
 
+    useEffect(() => {
+        async function getUserName() {
+            const res = await fetch("https://arixelai.onrender.com/api/getProfile", {
+                method: "GET",
+                credentials: "include",
+            })
+            const data = await res.json();
+            if (res.ok) {
+                setName(data.name);
+            }
+        }
+        getUserName();
+    }, [])
+
     const handleKeyDown = (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -76,38 +91,55 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
         }
     }, [chatHistory]);
 
-    async function handleSubmit() {
-        if (!chatInput.trim()) return;
+    async function handleSubmit(overrideInput) {
+        const messageToSend = overrideInput || chatInput;
+        if (!messageToSend.trim()) return;
         const base64Image = selectedFile ? await fileToBase64(selectedFile) : null;
-        const userMessage = { role: "user", content: chatInput };
+        const userMessage = { role: "user", content: messageToSend };
         const thinkingMessage = { role: "model", content: "Generating response..." };
         setChatHistory((prev) => [...prev.filter(msg => msg && msg !== ""), userMessage, thinkingMessage]);
         setCurrentState("chat");
-        const messageToSend = chatInput;
         setChatInput("");
         setFilePreview(null);
         setSelectedFile(null);
         setShowPopup(false);
 
-        const response = await fetch("https://arixelai.onrender.com/api/postChat", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            credentials: "include",
-            body: JSON.stringify({
-                text: messageToSend,
-                context: context,
-                image: selectedFile ? {
-                    base64: base64Image,
-                    mimeType: selectedFile.type,
-                } : null
+        try {
+            const response = await fetch("https://arixelai.onrender.com/api/postChat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                credentials: "include",
+                body: JSON.stringify({
+                    text: messageToSend,
+                    context: currentContext === "new" ? "" : context,
+                    image: selectedFile ? {
+                        base64: base64Image,
+                        mimeType: selectedFile.type,
+                    } : null
+                })
             })
-        })
-        const data = await response.json();
-        if (response.ok) {
-            setContext(data.context);
-            getChatHistory(data.context);
+            const data = await response.json();
+            if (response.ok) {
+                setContext(data.context);
+                getChatHistory(data.context);
+                if (currentContext === "new") {
+                    getContextHistory();
+                }
+                setCurrentContext("old");
+            } else {
+                setChatHistory((prev) => [
+                    ...prev.slice(0, -1),
+                    { role: "model", content: "I'm really sorry, but I encountered an error while processing your request. Please try sending your message again." }
+                ]);
+            }
+        } catch (error) {
+            console.error("Error posting chat:", error);
+            setChatHistory((prev) => [
+                ...prev.slice(0, -1),
+                { role: "model", content: "I apologize, but I am unable to reach the server right now. Please verify your connection and try again." }
+            ]);
         }
 
     }
@@ -115,7 +147,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
     async function getChatHistory(currentContext) {
         const activeContext = currentContext || context;
         if (!activeContext) return;
-        
+
         try {
             const response = await fetch("https://arixelai.onrender.com/api/getChatHistory", {
                 method: "POST",
@@ -141,19 +173,30 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
 
     return (
         <section className="chat-content-area">
+            {/* Mobile Hamburger Toggle Button */}
+            <button className="mobile-sidebar-toggle" onClick={() => setIsSidebarOpen(true)} aria-label="Open Sidebar">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+
+            {/* Sidebar backdrop overlay on mobile */}
+            {isSidebarOpen && <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />}
             {currentState === "hero" && (
                 <div className="hero-container">
                     <div className="logo-display-container">
                         <img src={icon} alt="Axiel AI Icon" />
                     </div>
                     <div className="welcome-text-container">
-                        <h1>Welcome back, Alex. How can I help you today?</h1>
+                        <h1>Welcome back, {name || "Guest"}! How can I help you today?</h1>
                     </div>
                     <div className="tagline-container">
                         Start a new conversation or pick a suggested task below to get things moving.
                     </div>
                     <div className="suggestions-container">
-                        <div className="suggestion-card">
+                        <div className="suggestion-card" onClick={() => handleSubmit("Write a marketing email")}>
                             <div className="card-icon-container">
                                 <img src={emailIcon} alt="email-icon" />
                             </div>
@@ -162,7 +205,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
                                 <div className="suggestion-desc-container">Generate a high-converting announcement for a new product launch.</div>
                             </div>
                         </div>
-                        <div className="suggestion-card">
+                        <div className="suggestion-card" onClick={() => handleSubmit("Debug my Python script")}>
                             <div className="card-icon-container">
                                 <img src={codeIcon} alt="code-icon" />
                             </div>
@@ -171,7 +214,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
                                 <div className="suggestion-desc-container">Upload a snippet and I'll find potential bottlenecks or logic errors.</div>
                             </div>
                         </div>
-                        <div className="suggestion-card">
+                        <div className="suggestion-card" onClick={() => handleSubmit("Summarize this article")}>
                             <div className="card-icon-container">
                                 <img src={docIcon} alt="doc-icon" />
                             </div>
@@ -180,7 +223,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
                                 <div className="suggestion-desc-container">Paste a long-form URL or text and get the key bullet points instantly.</div>
                             </div>
                         </div>
-                        <div className="suggestion-card">
+                        <div className="suggestion-card" onClick={() => handleSubmit("Plan a 3-day trip")}>
                             <div className="card-icon-container">
                                 <img src={compassIcon} alt="compass-icon" />
                             </div>
@@ -269,7 +312,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
                         </button>
                     </div>
                     <div className="input-footer-row">
-                        <div className="model-info">Model: GPT-4o</div>
+                        <div className="model-info">Model: GPT-1o</div>
                     </div>
                 </div>
             </div>

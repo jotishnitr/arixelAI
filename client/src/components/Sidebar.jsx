@@ -4,33 +4,11 @@ import historyIcon from "../assets/history.png";
 import settingsIcon from "../assets/settings.png";
 import profileIcon from "../assets/profile.png";
 import { useState, useEffect, useRef } from "react";
-export default function Sidebar({ context, setContext, currentState, setCurrentState }) {
+export default function Sidebar({ context, setContext, currentState, setCurrentState, currentContext, setCurrentContext, contextHistory, setContextHistory, getContextHistory, isSidebarOpen, setIsSidebarOpen }) {
   const [currentChat, setCurrentChat] = useState(null);
-  const [contextHistory, setContextHistory] = useState([]);
-
-  useEffect(() => {
-    async function getContextHistory() {
-      try {
-        const response = await fetch(
-          "https://arixelai.onrender.com/api/getChatContextHistory",
-          {
-            method: "GET",
-            credentials: "include",
-          },
-        );
-        const data = await response.json();
-        if (data.contextHistory) {
-          setContextHistory(data.contextHistory);
-        }
-      } catch (error) {
-        console.error("Error fetching context history:", error);
-      }
-    }
-    getContextHistory();
-  }, []);
 
   return (
-    <section className="sidebar-section">
+    <section className={`sidebar-section ${isSidebarOpen ? "open" : ""}`}>
       <div className="sidebar-header-container">
         <div className="sidebar-icon-container">
           <img src={icon} alt="ArixelAI Logo" />
@@ -41,7 +19,7 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
       </div>
 
       <div className="new-chat-btn-container">
-        <button className="new-chat-btn" onClick={() => { setCurrentState("hero"); setCurrentChat(null) }}>+ New Chat</button>
+        <button className="new-chat-btn" onClick={() => { setCurrentState("hero"); setCurrentChat(null); setCurrentContext("new"); setContext(""); setIsSidebarOpen(false); }}>+ New Chat</button>
       </div>
 
       <div className="history-chat-display-container">
@@ -55,7 +33,7 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
                   : "chat-container"
               }
               key={chat._id}
-              onClick={() => { setCurrentChat(chat._id); setContext(chat.context); setCurrentState("chat") }}>
+              onClick={() => { setCurrentChat(chat._id); setContext(chat.context); setCurrentState("chat"); setCurrentContext("old"); setIsSidebarOpen(false); }}>
               <img
                 className="history-icon"
                 src={historyIcon}
@@ -68,13 +46,16 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
       </div>
 
       <div className="user-section">
-        {/*<div className="settings-container">
-          <img src={settingsIcon} alt="Settings Icon" />
-          Settings
-        </div>*/}
-        <div className={currentState === "profile" ? "profile-container-active" : "profile-container"} onClick={() => setCurrentState("profile")}>
-          <img src={profileIcon} alt="Profile Icon" />
-          Profile
+        <div 
+          className={currentState === "profile" ? "profile-container-active" : "profile-container"}
+          onClick={() => { setCurrentState("profile"); setIsSidebarOpen(false); }}
+        >
+          <div className="profile-icon">
+            <img src={profileIcon} alt="Profile Icon" />
+          </div>
+          <div className="user-info">
+            <div className="username">Profile</div>
+          </div>
         </div>
       </div>
     </section>
