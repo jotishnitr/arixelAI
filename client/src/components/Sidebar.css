@@ -6,6 +6,8 @@
   box-sizing: border-box;
   padding-top: 20px;
   border-right: 1px solid rgba(208, 188, 255, 0.08);
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-header-container {
@@ -17,6 +19,7 @@
   border-bottom: 1px solid rgba(208, 188, 255, 0.08);
   padding-bottom: 12px;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .sidebar-icon-container {
@@ -66,6 +69,7 @@
   padding-top: 30px;
   width: 86%;
   margin: auto;
+  flex-shrink: 0;
 }
 
 .new-chat-btn {
@@ -100,6 +104,9 @@
   width: 80%;
   margin-left: 20px;
   margin-top: 30px;
+  flex-grow: 1;
+  overflow: hidden;
+  margin-bottom: 90px;
 }
 
 .recent-title {
@@ -107,7 +114,7 @@
   font-size: 18px;
   font-weight: 600;
   font-family: 'JetBrains Mono', sans-serif;
-
+  flex-shrink: 0;
 }
 
 .history-chat-display {
@@ -117,7 +124,7 @@
   row-gap: 10px;
   overflow-y: auto;
   overflow-x: hidden;
-  height: 50%;
+  flex-grow: 1;
 }
 
 .chat-container,
