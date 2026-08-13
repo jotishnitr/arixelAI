@@ -17,6 +17,7 @@ const getChatHistory = require('./routes/getChatHistory.js')
 const verify = require('./routes/verify.js')
 const postProfile = require('./routes/postProfile.js')
 const getProfile = require('./routes/getProfile.js')
+const logout = require('./routes/logout.js')
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
@@ -54,6 +55,7 @@ app.use("/api", getChatContextHistory);
 app.use("/api", postUser);
 app.use('/auth', googleAuth);
 app.use('/auth', login);
+app.use('/auth', logout);
 app.use('/api', getChatHistory);
 app.use('/verify', verify);
 app.use('/api', postProfile);

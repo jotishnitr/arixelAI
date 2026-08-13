@@ -220,6 +220,38 @@
     transform: translateY(0);
 }
 
+.profile-display-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    width: 100%;
+}
+
+.signout-btn {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    outline: none;
+    border-radius: 12px;
+    padding: 12px 24px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    width: 100%;
+}
+
+.signout-btn:hover {
+    background: rgba(239, 68, 68, 0.25);
+    color: #f87171;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.15);
+}
+
+.signout-btn:active {
+    transform: translateY(0);
+}
+
 .profile-form {
     display: flex;
     flex-direction: column;

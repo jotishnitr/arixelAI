@@ -34,6 +34,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    padding-top: 40px;
 }
 
 .logo-display-container img {
@@ -589,7 +590,8 @@
 
 /* Responsiveness & Collapsible Sidebar */
 .mobile-sidebar-toggle {
-    display: none; /* Hidden on desktop */
+    display: none;
+    /* Hidden on desktop */
 }
 
 @media (max-width: 768px) {
@@ -633,7 +635,8 @@
         height: 100vh;
         background: rgba(0, 0, 0, 0.4);
         backdrop-filter: blur(4px);
-        z-index: 1999; /* Below sidebar (2000), above chat content area */
+        z-index: 1999;
+        /* Below sidebar (2000), above chat content area */
     }
 
     .suggestions-container {

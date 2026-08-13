@@ -64,6 +64,25 @@ export default function Profile({ setCurrentState }) {
         }
     }
 
+    async function handleLogout() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                credentials: "include",
+            });
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                console.error("Failed to sign out");
+            }
+        } catch (error) {
+            console.error("Error signing out:", error);
+        }
+    }
+
     if (loading) {
         return (
             <section className="profile-content-area">
@@ -193,7 +212,10 @@ export default function Profile({ setCurrentState }) {
                             </div>
                         </div>
 
-                        <button className="edit-btn" onClick={() => setProfileState("edit")}>Edit Profile</button>
+                        <div className="profile-display-actions">
+                            <button className="edit-btn" onClick={() => setProfileState("edit")}>Edit Profile</button>
+                            <button className="signout-btn" onClick={handleLogout}>Sign Out</button>
+                        </div>
                     </div>
                 </div>
             </section>
