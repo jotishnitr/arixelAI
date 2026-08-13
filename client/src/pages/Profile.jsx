@@ -90,54 +90,54 @@ export default function Profile({ setCurrentState }) {
                     <form className="profile-form" onSubmit={handleSubmit}>
                         <div className="profile-input-group">
                             <label htmlFor="name">Name</label>
-                            <input 
-                                type="text" 
-                                id="name" 
-                                value={name} 
-                                onChange={(e) => setName(e.target.value)} 
-                                placeholder="Name" 
+                            <input
+                                type="text"
+                                id="name"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="Name"
                                 required
                             />
                         </div>
                         <div className="profile-input-group">
                             <label htmlFor="email">Email Address</label>
-                            <input 
-                                type="email" 
-                                id="email" 
-                                value={email} 
-                                placeholder="Email Address" 
-                                disabled 
-                                className="disabled-input" 
+                            <input
+                                type="email"
+                                id="email"
+                                value={email}
+                                placeholder="Email Address"
+                                disabled
+                                className="disabled-input"
                             />
                         </div>
                         <div className="profile-input-group">
                             <label htmlFor="age">Age</label>
-                            <input 
-                                type="number" 
-                                id="age" 
-                                value={age} 
-                                onChange={(e) => setAge(e.target.value)} 
-                                placeholder="16" 
+                            <input
+                                type="number"
+                                id="age"
+                                value={age}
+                                onChange={(e) => setAge(e.target.value)}
+                                placeholder="16"
                             />
                         </div>
                         <div className="profile-input-group">
                             <label htmlFor="country">Country</label>
-                            <input 
-                                type="text" 
-                                id="country" 
-                                value={country} 
-                                onChange={(e) => setCountry(e.target.value)} 
-                                placeholder="Country" 
+                            <input
+                                type="text"
+                                id="country"
+                                value={country}
+                                onChange={(e) => setCountry(e.target.value)}
+                                placeholder="Country"
                             />
                         </div>
                         <div className="profile-input-group">
                             <label htmlFor="mobile">Mobile Number</label>
-                            <input 
-                                type="tel" 
-                                id="mobile" 
-                                value={mobile} 
-                                onChange={(e) => setMobile(e.target.value)} 
-                                placeholder="Mobile Number" 
+                            <input
+                                type="tel"
+                                id="mobile"
+                                value={mobile}
+                                onChange={(e) => setMobile(e.target.value)}
+                                placeholder="Mobile Number"
                             />
                         </div>
                         <div className="profile-actions-row">
