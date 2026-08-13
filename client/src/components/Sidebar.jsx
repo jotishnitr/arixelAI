@@ -31,18 +31,17 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
 
   return (
     <section className="sidebar-section">
-      <div className="header-container">
-        <div className="icon-container">
+      <div className="sidebar-header-container">
+        <div className="sidebar-icon-container">
           <img src={icon} alt="ArixelAI Logo" />
         </div>
-        <div className="title-container">
-          <div className="title">ArixelAI</div>
-          <div className="tagline">AI Assistant</div>
+        <div className="sidebar-title-container">
+          <div className="sidebar-title">ArixelAI</div>
         </div>
       </div>
 
       <div className="new-chat-btn-container">
-        <button className="new-chat-btn">+ New Chat</button>
+        <button className="new-chat-btn" onClick={() => { setCurrentState("hero"); setCurrentChat(null) }}>+ New Chat</button>
       </div>
 
       <div className="history-chat-display-container">
@@ -69,11 +68,11 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
       </div>
 
       <div className="user-section">
-        <div className="settings-container">
+        {/*<div className="settings-container">
           <img src={settingsIcon} alt="Settings Icon" />
           Settings
-        </div>
-        <div className="profile-container">
+        </div>*/}
+        <div className={currentState === "profile" ? "profile-container-active" : "profile-container"} onClick={() => setCurrentState("profile")}>
           <img src={profileIcon} alt="Profile Icon" />
           Profile
         </div>

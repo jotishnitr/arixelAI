@@ -1,5 +1,6 @@
 import Sidebar from "../components/Sidebar";
-import Chatarea from "../components/Chatarea"
+import Chatarea from "../components/Chatarea";
+import Profile from "./profile";
 import { useState } from "react";
 export default function Homepage() {
   const [context, setContext] = useState("");
@@ -9,6 +10,7 @@ export default function Homepage() {
     <>
       <Sidebar context={context} setContext={setContext} currentState={currentState} setCurrentState={setCurrentState} />
       <Chatarea context={context} setContext={setContext} currentState={currentState} setCurrentState={setCurrentState} />
+      {currentState === "profile" && <Profile setCurrentState={setCurrentState} />}
     </>
   );
 }

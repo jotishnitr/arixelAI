@@ -15,6 +15,8 @@ const googleAuth = require('./routes/googleAuth.js')
 const login = require('./routes/login.js')
 const getChatHistory = require('./routes/getChatHistory.js')
 const verify = require('./routes/verify.js')
+const postProfile = require('./routes/postProfile.js')
+const getProfile = require('./routes/getProfile.js')
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
@@ -54,6 +56,7 @@ app.use('/auth', googleAuth);
 app.use('/auth', login);
 app.use('/api', getChatHistory);
 app.use('/verify', verify);
-
+app.use('/api', postProfile);
+app.use('/api', getProfile);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));

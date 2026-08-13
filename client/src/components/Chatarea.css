@@ -22,7 +22,6 @@
     justify-content: center;
     flex-grow: 1;
     width: 100%;
-    max-width: 880px;
     margin: 0 auto;
     text-align: center;
 }
@@ -160,7 +159,6 @@
 .chat-input-wrapper {
     position: relative;
     width: 100%;
-    max-width: 880px;
     margin: 0 auto;
 }
 
@@ -313,7 +311,6 @@
 .chat-messages-container {
     flex-grow: 1;
     width: 100%;
-    max-width: 880px;
     margin: 0 auto 24px auto;
     display: flex;
     flex-direction: column;
@@ -457,6 +454,7 @@
         opacity: 0;
         transform: translateY(10px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
