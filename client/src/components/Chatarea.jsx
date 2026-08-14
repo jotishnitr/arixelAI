@@ -4,6 +4,7 @@ import codeIcon from "../assets/codeIcon.png"
 import docIcon from "../assets/documentIcon.png"
 import compassIcon from "../assets/compassIcon.png"
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useState, useEffect, useRef } from "react"
 import "./Chatarea.css"
 import Markdown from "react-markdown"
@@ -246,7 +247,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
                                 </div>
                             )}
                             <div className={`chat-bubble ${msg.role === "user" ? "user-bubble" : "ai-bubble"}`}>
-                                <div className={msg.role === "model" && msg.content === "Generating response..." ? "thinking-message" : ""}><Markdown>{msg.content}</Markdown></div>
+                                <div className={msg.role === "model" && msg.content === "Generating response..." ? "thinking-message" : ""}><Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown></div>
                             </div>
                         </div>
                     ))}

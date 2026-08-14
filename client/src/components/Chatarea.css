@@ -669,3 +669,36 @@
         margin: 0 10px;
     }
 }
+
+/* Markdown Table and Layout Rendering Styles */
+.chat-bubble table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 14px;
+    background: rgba(10, 18, 30, 0.3);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.chat-bubble th, 
+.chat-bubble td {
+    border: 1px solid rgba(208, 188, 255, 0.15);
+    padding: 10px 14px;
+    text-align: left;
+}
+
+.chat-bubble th {
+    background-color: rgba(208, 188, 255, 0.08);
+    color: #FFFFFF;
+    font-weight: 600;
+}
+
+.chat-bubble tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.chat-bubble p {
+    margin: 6px 0;
+    white-space: pre-wrap; /* Ensures standard line breaks in response are respected */
+}
