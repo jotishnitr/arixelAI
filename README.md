@@ -5,7 +5,7 @@
   <p><strong>Next-Generation Conversational Intelligence Platform</strong></p>
 
   <p>
-    A full-stack, multimodal AI chat application built from the ground up featuring the custom <strong>ArixelGPT-1o</strong> engine, enterprise-grade authentication, persistent session context, and an ultra-responsive interface.
+    A full-stack, multimodal AI chat application built from the ground up featuring the custom <strong>ArixelCore-1o</strong> engine, enterprise-grade authentication, persistent session context, and an ultra-responsive interface.
   </p>
 
   <p>
@@ -54,9 +54,9 @@
 <table>
   <tr>
     <td width="50%">
-      <h3>🤖 ArixelGPT-1o Intelligence</h3>
+      <h3>🤖 ArixelCore-1o Intelligence</h3>
       <ul>
-        <li><strong>Custom AI Persona:</strong> Tailored responses powered by the core ArixelGPT-1o engine.</li>
+        <li><strong>Custom AI Persona:</strong> Tailored responses powered by the core ArixelCore-1o engine.</li>
         <li><strong>Multimodal Processing:</strong> Send and analyze images alongside complex text prompts.</li>
         <li><strong>Auto-Thread Summarization:</strong> Generates clean 3–5 word session titles automatically on your first message.</li>
       </ul>
