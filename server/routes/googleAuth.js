@@ -3,7 +3,7 @@ const passport = require("passport");
 
 const router = express.Router();
 
-const CORS_ORIGIN = process.env.CORS_ORIGIN || "https://jotishnitr.github.io";
+const CORS_ORIGIN = process.env.CORS_ORIGIN || "https://jotishnitr.github.io/arixelAI";
 
 router.get(
     "/google",
