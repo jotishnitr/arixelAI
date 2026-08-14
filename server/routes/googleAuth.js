@@ -3,7 +3,7 @@ const passport = require("passport");
 
 const router = express.Router();
 
-const CORS_ORIGIN = process.env.CORS_ORIGIN || (process.env.NODE_ENV === "production" ? "https://jotishnitr.github.io" : "http://localhost:5173");
+const CORS_ORIGIN = process.env.CORS_ORIGIN || "https://jotishnitr.github.io";
 
 router.get(
     "/google",
@@ -14,7 +14,11 @@ router.get(
     "/google/callback",
     passport.authenticate("google", { failureRedirect: "/login" }),
     (req, res) => {
-        res.redirect(`${CORS_ORIGIN}`);
+        const host = req.get("host") || "";
+        const clientRedirectUrl = host.includes("localhost") 
+            ? "http://localhost:5173" 
+            : CORS_ORIGIN;
+        res.redirect(clientRedirectUrl);
     }
 );
 
