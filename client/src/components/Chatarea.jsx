@@ -312,7 +312,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
                         </button>
                     </div>
                     <div className="input-footer-row">
-                        <div className="model-info">Model: GPT-1o</div>
+                        <div className="model-info">Model: Core-1o</div>
                     </div>
                 </div>
             </div>
