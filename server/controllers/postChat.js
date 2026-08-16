@@ -32,7 +32,7 @@ const postChat = async (req, res) => {
             userId = userDoc ? userDoc.userId : null;
         }
         const message = req.body.text;
-        const image = req.body.image;
+        const attachment = req.body.attachment || req.body.image;
         const context = req.body.context;
         const role = req.body.role || 'user';
 
@@ -69,17 +69,26 @@ const postChat = async (req, res) => {
             }
         });
 
-        // Send the new message to the model
+        // Send the new message to the model (only image attachments are sent inline to model)
+        const isImage = attachment && attachment.mimeType && attachment.mimeType.startsWith('image/');
         const response = await chatSession.sendMessage({
-            message: image ? [
+            message: isImage ? [
                 { text: message },
-                { inlineData: { data: image.base64, mimeType: image.mimeType } }
+                { inlineData: { data: attachment.base64, mimeType: attachment.mimeType } }
             ] : message
         });
 
         // Save user message and AI response to MongoDB
         chat.messages.push(
-            { content: message, role: "user" },
+            { 
+                content: message, 
+                role: "user",
+                attachment: attachment ? {
+                    name: attachment.name || "Attachment",
+                    mimeType: attachment.mimeType,
+                    base64: attachment.base64
+                } : null
+            },
             { content: response.text, role: "model" }
         );
         await chat.save();

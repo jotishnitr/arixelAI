@@ -96,7 +96,17 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
         const messageToSend = overrideInput || chatInput;
         if (!messageToSend.trim()) return;
         const base64Image = selectedFile ? await fileToBase64(selectedFile) : null;
-        const userMessage = { role: "user", content: messageToSend };
+        const attachmentObj = selectedFile ? {
+            name: selectedFile.name,
+            mimeType: selectedFile.type,
+            base64: base64Image
+        } : null;
+        
+        const userMessage = { 
+            role: "user", 
+            content: messageToSend,
+            attachment: attachmentObj
+        };
         const thinkingMessage = { role: "model", content: "Generating response..." };
         setChatHistory((prev) => [...prev.filter(msg => msg && msg !== ""), userMessage, thinkingMessage]);
         setCurrentState("chat");
@@ -115,10 +125,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
                 body: JSON.stringify({
                     text: messageToSend,
                     context: currentContext === "new" ? "" : context,
-                    image: selectedFile ? {
-                        base64: base64Image,
-                        mimeType: selectedFile.type,
-                    } : null
+                    attachment: attachmentObj
                 })
             })
             const data = await response.json();
@@ -247,6 +254,22 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
                                 </div>
                             )}
                             <div className={`chat-bubble ${msg.role === "user" ? "user-bubble" : "ai-bubble"}`}>
+                                {msg.attachment && (
+                                    <div className="chat-attachment-preview">
+                                        {msg.attachment.mimeType && msg.attachment.mimeType.startsWith("image/") ? (
+                                            <img 
+                                                src={`data:${msg.attachment.mimeType};base64,${msg.attachment.base64}`} 
+                                                alt={msg.attachment.name} 
+                                                className="chat-attached-image" 
+                                            />
+                                        ) : (
+                                            <div className="chat-attached-file">
+                                                <span className="file-icon">📄</span>
+                                                <span className="file-name">{msg.attachment.name}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 <div className={msg.role === "model" && msg.content === "Generating response..." ? "thinking-message" : ""}><Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown></div>
                             </div>
                         </div>
