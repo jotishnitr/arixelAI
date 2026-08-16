@@ -20,7 +20,9 @@ const requestPasswordReset = async (req, res, next) => {
         const resetURL = `${frontendURL}/reset-password?id=${user.userId}&token=${token}`;
 
         const transporter = nodemailer.createTransport({
-            service: 'gmail',
+            host: 'smtp.gmail.com',
+            port: 587,
+            secure: false, // use TLS
             auth: {
                 user: process.env.EMAIL,
                 pass: process.env.EMAIL_PASSWORD
