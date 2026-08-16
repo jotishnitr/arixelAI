@@ -17,27 +17,74 @@ SCOPE:
 - If asked about ArixelAI the company/product itself and you don't have real info, say: "I don't have those details right now, but you can check ArixelAI's official channels."
 - Never invent fake specs, fake release dates, or fake technical claims about ArixelCore-1o.`
 
-
-
 const mongoose = require('mongoose')
 const ChatModel = require('../models/ChatModel')
 const ai = require('../utils/geminiClient')
 const groq = require('../utils/groqClient')
+
+const getGroqMessageContent = (message, attachment) => {
+    const isImage = attachment && attachment.mimeType && attachment.mimeType.startsWith('image/');
+    if (isImage) {
+        return [
+            { type: "text", text: message },
+            {
+                type: "image_url",
+                image_url: {
+                    url: `data:${attachment.mimeType};base64,${attachment.base64}`
+                }
+            }
+        ];
+    }
+    return message;
+};
+
+const buildGroqMessages = (systemPrompt, history, currentMessage, currentAttachment) => {
+    const messages = [{ role: "system", content: systemPrompt }];
+    history.forEach(msg => {
+        messages.push({
+            role: msg.role === 'model' ? 'assistant' : 'user',
+            content: msg.content
+        });
+    });
+    messages.push({
+        role: "user",
+        content: getGroqMessageContent(currentMessage, currentAttachment)
+    });
+    return messages;
+};
+
+const generateGroqContext = async (groqClient, modelName, message) => {
+    const response = await groqClient.chat.completions.create({
+        model: modelName,
+        messages: [
+            {
+                role: "system",
+                content: "Create only a 3-5 word title/context summary from the prompt. Do not reply to or answer the prompt."
+            },
+            {
+                role: "user",
+                content: message
+            }
+        ]
+    });
+    return response.choices[0]?.message?.content?.trim() || "New Chat";
+};
+
 const postChat = async (req, res) => {
+    let chat;
+    const message = req.body.text;
+    const attachment = req.body.attachment || req.body.image;
+    const context = req.body.context;
+    
+    let userId = req.user.userId;
+    if (!userId && req.user.id) {
+        const User = require('../models/UserModel');
+        const userDoc = await User.findById(req.user.id);
+        userId = userDoc ? userDoc.userId : null;
+    }
+
     try {
-        let userId = req.user.userId;
-        if (!userId && req.user.id) {
-            const User = require('../models/UserModel');
-            const userDoc = await User.findById(req.user.id);
-            userId = userDoc ? userDoc.userId : null;
-        }
-        const message = req.body.text;
-        const attachment = req.body.attachment || req.body.image;
-        const context = req.body.context;
-        const role = req.body.role || 'user';
-
-        let chat = await ChatModel.findOne({ userId, context });
-
+        chat = await ChatModel.findOne({ userId, context });
 
         if (!chat) {
             // Generate a context summary using Gemini
@@ -80,8 +127,8 @@ const postChat = async (req, res) => {
 
         // Save user message and AI response to MongoDB
         chat.messages.push(
-            {
-                content: message,
+            { 
+                content: message, 
                 role: "user",
                 attachment: attachment ? {
                     name: attachment.name || "Attachment",
@@ -100,43 +147,26 @@ const postChat = async (req, res) => {
         });
 
     } catch (err) {
+        console.warn("Gemini failed, falling back to Groq Llama:", err.message);
         try {
+            // First Fallback: Groq llama-3.3-70b-versatile
             if (!chat) {
-                // Generate a context summary using Gemini
-                const groqContext = await groq.chat.completions.create({
-                    model: "llama-3.3-70b-versatile",
-                    messages: [
-                        {
-                            role: "system",
-                            content: "Create only a 3-5 word title/context summary from the prompt. Do not reply to or answer the prompt."
-                        },
-                        {
-                            role: "user",
-                            content: message
-                        }
-                    ],
-                });
-                const generatedGroqContext = groqContext.choices[0].message.content ? groqContext.choices[0].message.content.trim() : context;
-
+                const title = await generateGroqContext(groq, "llama-3.3-70b-versatile", message);
                 chat = await ChatModel.create({
                     userId,
-                    context: generatedGroqContext,
+                    context: title,
                     messages: []
                 });
             }
+
+            const groqMessages = buildGroqMessages(SYSTEM_PROMPT, chat.messages, message, attachment);
             const response = await groq.chat.completions.create({
                 model: "llama-3.3-70b-versatile",
-                messages: chat.messages.map((msg) => ({
-                    role: msg.role,
-                    content: msg.content,
-                })),
-                config: {
-                    systemInstruction: SYSTEM_PROMPT
-                }
-            })
-            const responseText = response.choices[0].message.content ? response.choices[0].message.content.trim() : response.text;
+                messages: groqMessages
+            });
 
-            // Save user message and AI response to MongoDB
+            const responseText = response.choices[0]?.message?.content || "";
+
             chat.messages.push(
                 {
                     content: message,
@@ -151,14 +181,57 @@ const postChat = async (req, res) => {
             );
             await chat.save();
 
-            res.status(200).json({
+            return res.status(200).json({
                 message: "Chat updated successfully",
                 response: responseText,
                 context: chat.context
             });
-        } catch (err) {
-            console.error(err);
-            res.status(500).json({ message: "Internal Server Error" });
+
+        } catch (llamaErr) {
+            console.warn("Llama failed, falling back to Groq openai/gpt-oss-120b:", llamaErr.message);
+            try {
+                // Second Fallback: Groq openai/gpt-oss-120b
+                if (!chat) {
+                    const title = await generateGroqContext(groq, "openai/gpt-oss-120b", message);
+                    chat = await ChatModel.create({
+                        userId,
+                        context: title,
+                        messages: []
+                    });
+                }
+
+                const groqMessages = buildGroqMessages(SYSTEM_PROMPT, chat.messages, message, attachment);
+                const response = await groq.chat.completions.create({
+                    model: "openai/gpt-oss-120b",
+                    messages: groqMessages
+                });
+
+                const responseText = response.choices[0]?.message?.content || "";
+
+                chat.messages.push(
+                    {
+                        content: message,
+                        role: "user",
+                        attachment: attachment ? {
+                            name: attachment.name || "Attachment",
+                            mimeType: attachment.mimeType,
+                            base64: attachment.base64
+                        } : null
+                    },
+                    { content: responseText, role: "model" }
+                );
+                await chat.save();
+
+                return res.status(200).json({
+                    message: "Chat updated successfully",
+                    response: responseText,
+                    context: chat.context
+                });
+
+            } catch (finalErr) {
+                console.error("All AI models failed:", finalErr);
+                return res.status(500).json({ message: "Internal Server Error", error: finalErr.message });
+            }
         }
     }
 }
