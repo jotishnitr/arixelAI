@@ -22,6 +22,20 @@ const ChatModel = require('../models/ChatModel')
 const ai = require('../utils/geminiClient')
 const groq = require('../utils/groqClient')
 
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const retry = async (fn, retries = 2, delay = 1000) => {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            return await fn();
+        } catch (error) {
+            if (i === retries) throw error;
+            console.warn(`Attempt ${i + 1} failed. Retrying in ${delay}ms...`, error.message);
+            await wait(delay);
+        }
+    }
+};
+
 const getGroqMessageContent = (message, attachment) => {
     const isImage = attachment && attachment.mimeType && attachment.mimeType.startsWith('image/');
     if (isImage) {
@@ -54,7 +68,7 @@ const buildGroqMessages = (systemPrompt, history, currentMessage, currentAttachm
 };
 
 const generateGroqContext = async (groqClient, modelName, message) => {
-    const response = await groqClient.chat.completions.create({
+    const response = await retry(() => groqClient.chat.completions.create({
         model: modelName,
         messages: [
             {
@@ -66,7 +80,7 @@ const generateGroqContext = async (groqClient, modelName, message) => {
                 content: message
             }
         ]
-    });
+    }));
     return response.choices[0]?.message?.content?.trim() || "New Chat";
 };
 
@@ -89,14 +103,14 @@ const postChat = async (req, res) => {
         if (!chat) {
             let generatedContext = context || "New Chat";
             try {
-                // Generate a context summary using Gemini
-                const aiContext = await ai.models.generateContent({
+                // Generate a context summary using Gemini with retry
+                const aiContext = await retry(() => ai.models.generateContent({
                     model: "gemini-flash-latest",
                     contents: message,
                     config: {
                         systemInstruction: 'Create only a 3-5 word title/context summary from the prompt. Do not reply to or answer the prompt.'
                     }
-                });
+                }));
                 generatedContext = aiContext.text ? aiContext.text.trim() : (context || "New Chat");
             } catch (titleErr) {
                 console.warn("Gemini context summary failed, falling back to Groq Llama for title:", titleErr.message);
@@ -129,12 +143,12 @@ const postChat = async (req, res) => {
 
         // Send the new message to the model (only image attachments are sent inline to model)
         const isImage = attachment && attachment.mimeType && attachment.mimeType.startsWith('image/');
-        const response = await chatSession.sendMessage({
+        const response = await retry(() => chatSession.sendMessage({
             message: isImage ? [
                 { text: message },
                 { inlineData: { data: attachment.base64, mimeType: attachment.mimeType } }
             ] : message
-        });
+        }));
 
         // Save user message and AI response to MongoDB
         chat.messages.push(
@@ -171,10 +185,10 @@ const postChat = async (req, res) => {
             }
 
             const groqMessages = buildGroqMessages(SYSTEM_PROMPT, chat.messages, message, attachment);
-            const response = await groq.chat.completions.create({
+            const response = await retry(() => groq.chat.completions.create({
                 model: "llama-3.3-70b-versatile",
                 messages: groqMessages
-            });
+            }));
 
             const responseText = response.choices[0]?.message?.content || "";
 
@@ -212,10 +226,10 @@ const postChat = async (req, res) => {
                 }
 
                 const groqMessages = buildGroqMessages(SYSTEM_PROMPT, chat.messages, message, attachment);
-                const response = await groq.chat.completions.create({
+                const response = await retry(() => groq.chat.completions.create({
                     model: "openai/gpt-oss-120b",
                     messages: groqMessages
-                });
+                }));
 
                 const responseText = response.choices[0]?.message?.content || "";
 
