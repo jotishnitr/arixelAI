@@ -12,7 +12,7 @@ export default function App() {
   useEffect(() => {
     async function verification() {
       // Check if URL is for resetting password
-      if (window.location.pathname === "/reset-password") {
+      if (window.location.pathname.endsWith("/reset-password")) {
         setCurrentPage("ResetPassword");
         return;
       }

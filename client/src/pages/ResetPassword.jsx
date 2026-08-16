@@ -162,7 +162,8 @@ export default function ResetPassword({ setCurrentPage }) {
                     <p className="footer-text" style={{ marginTop: "20px" }}>
                         <span className="link" onClick={() => {
                             // Reset pathname so it doesn't try to load reset-password on page refresh
-                            window.history.replaceState({}, document.title, "/");
+                            const baseDir = window.location.pathname.replace("/reset-password", "") || "/";
+                            window.history.replaceState({}, document.title, baseDir);
                             setCurrentPage("Login");
                         }}>
                             Back to Sign In
