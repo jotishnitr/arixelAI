@@ -22,7 +22,7 @@ SCOPE:
 const mongoose = require('mongoose')
 const ChatModel = require('../models/ChatModel')
 const ai = require('../utils/geminiClient')
-
+const groq = require('../utils/groqClient')
 const postChat = async (req, res) => {
     try {
         let userId = req.user.userId;
@@ -80,8 +80,8 @@ const postChat = async (req, res) => {
 
         // Save user message and AI response to MongoDB
         chat.messages.push(
-            { 
-                content: message, 
+            {
+                content: message,
                 role: "user",
                 attachment: attachment ? {
                     name: attachment.name || "Attachment",
@@ -100,8 +100,66 @@ const postChat = async (req, res) => {
         });
 
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: "Internal Server Error", error: err.message });
+        try {
+            if (!chat) {
+                // Generate a context summary using Gemini
+                const groqContext = await groq.chat.completions.create({
+                    model: "llama-3.3-70b-versatile",
+                    messages: [
+                        {
+                            role: "system",
+                            content: "Create only a 3-5 word title/context summary from the prompt. Do not reply to or answer the prompt."
+                        },
+                        {
+                            role: "user",
+                            content: message
+                        }
+                    ],
+                });
+                const generatedGroqContext = groqContext.choices[0].message.content ? groqContext.choices[0].message.content.trim() : context;
+
+                chat = await ChatModel.create({
+                    userId,
+                    context: generatedGroqContext,
+                    messages: []
+                });
+            }
+            const response = await groq.chat.completions.create({
+                model: "llama-3.3-70b-versatile",
+                messages: chat.messages.map((msg) => ({
+                    role: msg.role,
+                    content: msg.content,
+                })),
+                config: {
+                    systemInstruction: SYSTEM_PROMPT
+                }
+            })
+            const responseText = response.choices[0].message.content ? response.choices[0].message.content.trim() : response.text;
+
+            // Save user message and AI response to MongoDB
+            chat.messages.push(
+                {
+                    content: message,
+                    role: "user",
+                    attachment: attachment ? {
+                        name: attachment.name || "Attachment",
+                        mimeType: attachment.mimeType,
+                        base64: attachment.base64
+                    } : null
+                },
+                { content: responseText, role: "model" }
+            );
+            await chat.save();
+
+            res.status(200).json({
+                message: "Chat updated successfully",
+                response: responseText,
+                context: chat.context
+            });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ message: "Internal Server Error" });
+        }
     }
 }
 
