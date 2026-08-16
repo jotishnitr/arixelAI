@@ -189,9 +189,42 @@
   margin: 0;
   margin-left: 12px;
   transition: color 0.3s ease;
+  flex-grow: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-container:hover .chat-title {
+  color: #FFFFFF;
+}
+
+.context-menu-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #CBC3D7;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 6px;
+  margin-left: 8px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+
+.chat-container:hover .context-menu-btn,
+.chat-container-active .context-menu-btn {
+  opacity: 0.7;
+}
+
+.chat-container:hover .context-menu-btn:hover,
+.chat-container-active .context-menu-btn:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.1);
   color: #FFFFFF;
 }
 
