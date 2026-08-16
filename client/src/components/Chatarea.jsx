@@ -93,7 +93,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
     }, [chatHistory]);
 
     async function handleSubmit(overrideInput) {
-        const messageToSend = overrideInput || chatInput;
+        const messageToSend = (typeof overrideInput === "string" ? overrideInput : "") || chatInput;
         if (!messageToSend.trim()) return;
         const base64Image = selectedFile ? await fileToBase64(selectedFile) : null;
         const attachmentObj = selectedFile ? {
