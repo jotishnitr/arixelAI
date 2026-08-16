@@ -27,7 +27,7 @@ const requestPasswordReset = async (req, res, next) => {
                 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
             },
             body: JSON.stringify({
-                from: 'Acme <onboarding@resend.dev>', // Resend's free testing address
+                from: 'onboarding@resend.dev',
                 to: user.email,
                 subject: 'Reset Password',
                 html: `<p>Reset your password by clicking on the link: <a href="${resetURL}">${resetURL}</a></p>`
