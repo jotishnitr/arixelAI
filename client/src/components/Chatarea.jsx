@@ -270,7 +270,7 @@ export default function Chatarea({ setContext, context, currentState, setCurrent
                                         )}
                                     </div>
                                 )}
-                                <div className={msg.role === "model" && msg.content === "Generating response..." ? "thinking-message" : ""}><Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown></div>
+                                <div className={msg.role === "model" && msg.content === "Generating response..." ? "thinking-message" : ""}><Markdown remarkPlugins={[remarkGfm]}>{msg.content || ""}</Markdown></div>
                             </div>
                         </div>
                     ))}
