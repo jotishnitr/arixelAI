@@ -191,9 +191,8 @@
   margin-left: 12px;
   transition: color 0.3s ease;
   flex-grow: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .chat-container:hover .chat-title {

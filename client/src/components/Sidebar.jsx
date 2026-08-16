@@ -114,7 +114,7 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
                 src={historyIcon}
                 alt="History Icon"
               />
-              <p className="chat-title">{chat.context}</p>
+              <p className="chat-title" title={chat.context}>{chat.context}</p>
               <button
                 className="context-menu-btn"
                 onClick={(e) => {
