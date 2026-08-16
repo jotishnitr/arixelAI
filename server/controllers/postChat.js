@@ -87,15 +87,26 @@ const postChat = async (req, res) => {
         chat = await ChatModel.findOne({ userId, context });
 
         if (!chat) {
-            // Generate a context summary using Gemini
-            const aiContext = await ai.models.generateContent({
-                model: "gemini-flash-latest",
-                contents: message,
-                config: {
-                    systemInstruction: 'Create only a 3-5 word title/context summary from the prompt. Do not reply to or answer the prompt.'
+            let generatedContext = context || "New Chat";
+            try {
+                // Generate a context summary using Gemini
+                const aiContext = await ai.models.generateContent({
+                    model: "gemini-flash-latest",
+                    contents: message,
+                    config: {
+                        systemInstruction: 'Create only a 3-5 word title/context summary from the prompt. Do not reply to or answer the prompt.'
+                    }
+                });
+                generatedContext = aiContext.text ? aiContext.text.trim() : (context || "New Chat");
+            } catch (titleErr) {
+                console.warn("Gemini context summary failed, falling back to Groq Llama for title:", titleErr.message);
+                try {
+                    generatedContext = await generateGroqContext(groq, "llama-3.3-70b-versatile", message);
+                } catch (groqTitleErr) {
+                    console.warn("Groq context summary failed, using fallback:", groqTitleErr.message);
+                    generatedContext = context || "New Chat";
                 }
-            });
-            const generatedContext = aiContext.text ? aiContext.text.trim() : context;
+            }
 
             chat = await ChatModel.create({
                 userId,
