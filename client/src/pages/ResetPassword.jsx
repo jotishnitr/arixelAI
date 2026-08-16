@@ -13,7 +13,9 @@ export default function ResetPassword({ setCurrentPage }) {
     const [token, setToken] = useState("");
 
     useEffect(() => {
-        const queryParams = new URLSearchParams(window.location.search);
+        const hash = window.location.hash;
+        const queryString = hash.includes("?") ? hash.split("?")[1] : "";
+        const queryParams = new URLSearchParams(queryString);
         const urlId = queryParams.get("id");
         const urlToken = queryParams.get("token");
 
@@ -162,8 +164,7 @@ export default function ResetPassword({ setCurrentPage }) {
                     <p className="footer-text" style={{ marginTop: "20px" }}>
                         <span className="link" onClick={() => {
                             // Reset pathname so it doesn't try to load reset-password on page refresh
-                            const baseDir = window.location.pathname.replace("/reset-password", "") || "/";
-                            window.history.replaceState({}, document.title, baseDir);
+                            window.history.replaceState({}, document.title, window.location.pathname);
                             setCurrentPage("Login");
                         }}>
                             Back to Sign In

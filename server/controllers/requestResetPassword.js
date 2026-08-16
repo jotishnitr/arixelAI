@@ -17,7 +17,7 @@ const requestPasswordReset = async (req, res, next) => {
 
         // URL should point to your frontend application's reset password page
         const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173/arixelAI';
-        const resetURL = `${frontendURL}/reset-password?id=${user.userId}&token=${token}`;
+        const resetURL = `${frontendURL}/#/reset-password?id=${user.userId}&token=${token}`;
 
         // Send email using Resend HTTP API (Port 443/HTTPS is not blocked by Render)
         const emailResponse = await fetch('https://api.resend.com/emails', {
