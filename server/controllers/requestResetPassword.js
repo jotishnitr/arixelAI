@@ -14,7 +14,7 @@ const requestPasswordReset = async (req, res, next) => {
         }
         const secret = (process.env.JWT_SECRET || process.env.JWT_SECRET_KEY) + user.password;
         const token = jwt.sign({ id: user.userId, email: user.email }, secret, { expiresIn: '1h' });
-        
+
         // URL should point to your frontend application's reset password page
         const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173';
         const resetURL = `${frontendURL}/reset-password?id=${user.userId}&token=${token}`;
@@ -37,7 +37,7 @@ const requestPasswordReset = async (req, res, next) => {
     }
     catch (err) {
         console.error(err);
-        return res.status(500).json({ message: 'Internal Server Error' });
+        return res.status(500).json({ message: 'Internal Server Error and please try once more' });
     }
 }
 
