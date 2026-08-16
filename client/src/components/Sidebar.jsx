@@ -24,9 +24,10 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
     const newTitle = prompt("Edit chat title:", currentTitle);
     if (newTitle && newTitle.trim() && newTitle.trim() !== currentTitle) {
       try {
-        await fetch(`https://arixelai.onrender.com/editContext`, {
+        await fetch(`https://arixelai.onrender.com/api/editContext`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             id: chatId,
             context: newTitle.trim()
@@ -55,9 +56,10 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
 
     if (window.confirm("Are you sure you want to delete this chat?")) {
       try {
-        await fetch(`https://arixelai.onrender.com/deleteContext`, {
+        await fetch(`https://arixelai.onrender.com/api/deleteChat`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             id: chatId
           })

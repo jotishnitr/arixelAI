@@ -19,6 +19,8 @@ const postProfile = require('./routes/postProfile.js')
 const getProfile = require('./routes/getProfile.js')
 const logout = require('./routes/logout.js')
 const resetPassword = require('./routes/resetPassword.js')
+const editContext = require('./routes/editContext.js')
+const deleteChat = require('./routes/deleteChat.js')
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
@@ -63,5 +65,7 @@ app.use('/verify', verify);
 app.use('/api', postProfile);
 app.use('/api', getProfile);
 app.use('/auth', resetPassword);
+app.use('/api', editContext);
+app.use('/api', deleteChat);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
