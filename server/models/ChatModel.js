@@ -3,8 +3,8 @@ const mongoose = require("mongoose");
 const ChatSchema = new mongoose.Schema({
     userId: { type: String, required: true },
     context: { type: String, required: true },
-    messages: [{ 
-        role: { type: String }, 
+    messages: [{
+        role: { type: String },
         content: { type: String },
         attachment: {
             name: { type: String },
