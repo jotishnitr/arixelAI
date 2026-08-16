@@ -319,3 +319,24 @@
     transform: translateY(0);
   }
 }
+
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.forgot-password {
+  font-size: 12px;
+  font-weight: 500;
+  color: #a78bfa;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.forgot-password:hover {
+  color: #c084fc;
+  text-shadow: 0 0 8px rgba(192, 132, 252, 0.4);
+}

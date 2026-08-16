@@ -92,7 +92,10 @@ export default function Login({ setCurrentPage }) {
                         </div>
 
                         <div className="input-group">
-                            <label htmlFor="password">Password</label>
+                            <div className="label-row">
+                                <label htmlFor="password">Password</label>
+                                <span className="forgot-password" onClick={() => setCurrentPage("ForgotPassword")}>Forgot Password?</span>
+                            </div>
                             <div className="input-wrapper">
                                 <svg
                                     className="input-icon"

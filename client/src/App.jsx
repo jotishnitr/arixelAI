@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Homepage from "./pages/Homepage";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState("Register");
@@ -29,6 +30,7 @@ export default function App() {
     <>
       {currentPage === "Register" && <Register setCurrentPage={setCurrentPage} />}
       {currentPage === "Login" && <Login setCurrentPage={setCurrentPage} />}
+      {currentPage === "ForgotPassword" && <ForgotPassword setCurrentPage={setCurrentPage} />}
       {currentPage === "homePage" && <Homepage />}
     </>
   );
