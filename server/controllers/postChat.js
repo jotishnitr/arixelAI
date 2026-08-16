@@ -36,9 +36,11 @@ const retry = async (fn, retries = 2, delay = 1000) => {
     }
 };
 
-const getGroqMessageContent = (message, attachment) => {
+const getGroqMessageContent = (message, attachment, modelName) => {
+    const isVisionModel = modelName && (modelName.includes("vision") || modelName.includes("pixtral"));
     const isImage = attachment && attachment.mimeType && attachment.mimeType.startsWith('image/');
-    if (isImage) {
+    
+    if (isImage && isVisionModel) {
         return [
             { type: "text", text: message },
             {
@@ -49,20 +51,24 @@ const getGroqMessageContent = (message, attachment) => {
             }
         ];
     }
+    
+    if (attachment) {
+        return `${message} [Attachment: ${attachment.name || "File"}]`;
+    }
     return message;
 };
 
-const buildGroqMessages = (systemPrompt, history, currentMessage, currentAttachment) => {
+const buildGroqMessages = (systemPrompt, history, currentMessage, currentAttachment, modelName) => {
     const messages = [{ role: "system", content: systemPrompt }];
     history.forEach(msg => {
         messages.push({
             role: msg.role === 'model' ? 'assistant' : 'user',
-            content: msg.content
+            content: msg.content || ""
         });
     });
     messages.push({
         role: "user",
-        content: getGroqMessageContent(currentMessage, currentAttachment)
+        content: getGroqMessageContent(currentMessage, currentAttachment, modelName)
     });
     return messages;
 };
@@ -184,7 +190,7 @@ const postChat = async (req, res) => {
                 });
             }
 
-            const groqMessages = buildGroqMessages(SYSTEM_PROMPT, chat.messages, message, attachment);
+            const groqMessages = buildGroqMessages(SYSTEM_PROMPT, chat.messages, message, attachment, "llama-3.3-70b-versatile");
             const response = await retry(() => groq.chat.completions.create({
                 model: "llama-3.3-70b-versatile",
                 messages: groqMessages
@@ -225,7 +231,7 @@ const postChat = async (req, res) => {
                     });
                 }
 
-                const groqMessages = buildGroqMessages(SYSTEM_PROMPT, chat.messages, message, attachment);
+                const groqMessages = buildGroqMessages(SYSTEM_PROMPT, chat.messages, message, attachment, "openai/gpt-oss-120b");
                 const response = await retry(() => groq.chat.completions.create({
                     model: "openai/gpt-oss-120b",
                     messages: groqMessages
