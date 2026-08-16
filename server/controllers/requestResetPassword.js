@@ -19,22 +19,26 @@ const requestPasswordReset = async (req, res, next) => {
         const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173';
         const resetURL = `${frontendURL}/reset-password?id=${user.userId}&token=${token}`;
 
-        const transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com',
-            port: 587,
-            secure: false, // use TLS
-            auth: {
-                user: process.env.EMAIL,
-                pass: process.env.EMAIL_PASSWORD
-            }
+        // Send email using Resend HTTP API (Port 443/HTTPS is not blocked by Render)
+        const emailResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
+            },
+            body: JSON.stringify({
+                from: 'Acme <onboarding@resend.dev>', // Resend's free testing address
+                to: user.email,
+                subject: 'Reset Password',
+                html: `<p>Reset your password by clicking on the link: <a href="${resetURL}">${resetURL}</a></p>`
+            })
         });
 
-        await transporter.sendMail({
-            to: user.email,
-            from: process.env.EMAIL,
-            subject: "Reset Password",
-            html: `<p>Reset your password by clicking on the link: <a href="${resetURL}">${resetURL}</a></p>`
-        });
+        if (!emailResponse.ok) {
+            const errorData = await emailResponse.json();
+            throw new Error(`Resend API error: ${JSON.stringify(errorData)}`);
+        }
+
         return res.status(200).json({ message: 'Password reset link sent successfully' });
     }
     catch (err) {
