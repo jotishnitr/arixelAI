@@ -6,6 +6,17 @@ import profileIcon from "../assets/profile.png";
 import { useState, useEffect, useRef } from "react";
 export default function Sidebar({ context, setContext, currentState, setCurrentState, currentContext, setCurrentContext, contextHistory, setContextHistory, getContextHistory, isSidebarOpen, setIsSidebarOpen }) {
   const [currentChat, setCurrentChat] = useState(null);
+  const [activeMenuId, setActiveMenuId] = useState(null);
+
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setActiveMenuId(null);
+    };
+    window.addEventListener("click", handleOutsideClick);
+    return () => {
+      window.removeEventListener("click", handleOutsideClick);
+    };
+  }, []);
 
   return (
     <section className={`sidebar-section ${isSidebarOpen ? "open" : ""}`}>
@@ -44,6 +55,7 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
                 className="context-menu-btn" 
                 onClick={(e) => { 
                   e.stopPropagation(); 
+                  setActiveMenuId(activeMenuId === chat._id ? null : chat._id);
                 }}
                 aria-label="Chat options"
               >
@@ -53,6 +65,17 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
                   <circle cx="12" cy="19" r="1.5" fill="currentColor"></circle>
                 </svg>
               </button>
+
+              {activeMenuId === chat._id && (
+                <div className="context-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                  <button className="menu-item" onClick={(e) => { e.stopPropagation(); setActiveMenuId(null); /* User stub for edit */ }}>
+                    ✏️ Edit Title
+                  </button>
+                  <button className="menu-item delete" onClick={(e) => { e.stopPropagation(); setActiveMenuId(null); /* User stub for delete */ }}>
+                    🗑️ Delete Chat
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

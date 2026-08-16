@@ -137,6 +137,7 @@
   border-radius: 12px;
   cursor: pointer;
   border-left: 3px solid transparent;
+  position: relative;
   transition: background-color 0.3s ease, transform 0.2s ease, border-color 0.3s ease;
 }
 
@@ -318,4 +319,59 @@
   .sidebar-section.open {
     transform: translateX(0);
   }
+}
+
+.context-menu-dropdown {
+  position: absolute;
+  right: 12px;
+  top: 48px;
+  z-index: 1000;
+  background-color: #161f30;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  min-width: 130px;
+  animation: dropdownFadeIn 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.menu-item {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #CBC3D7;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: #FFFFFF;
+}
+
+.menu-item.delete:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
 }
