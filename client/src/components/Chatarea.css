@@ -256,6 +256,47 @@
     transform: scale(0.98);
 }
 
+/* Mic Button Styles */
+.mic-btn {
+    background: transparent;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    color: #CBC3D7;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+}
+
+.mic-btn:hover {
+    color: #FFFFFF;
+    background-color: rgba(255, 255, 255, 0.06);
+    transform: scale(1.05);
+}
+
+.mic-btn.listening {
+    color: #FFFFFF;
+    background-color: #ef4444;
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+    animation: micPulse 1.5s infinite ease-in-out;
+}
+
+@keyframes micPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+}
+
 /* Input Footer Row */
 .input-footer-row {
     display: flex;
