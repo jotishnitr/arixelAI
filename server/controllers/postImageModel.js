@@ -1,7 +1,13 @@
-const falAI = require('../utils/falClient');
 const Chat = require('../models/ChatModel');
 
+const models = [
+    "nanobanana-2",
+    "flux",
+    "seedream5"
+];
+
 const postImageModel = async (req, res) => {
+
     try {
         let userId = req.user.userId;
         if (!userId && req.user.id) {
@@ -16,13 +22,32 @@ const postImageModel = async (req, res) => {
         if (!message) {
             return res.status(400).json({ message: "Message/prompt is required" });
         }
+        let imageUrl = null;
+        for (const model of models) {
+            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(message)}?model=${model}`;
+
+            try {
+                const response = await fetch(url, {
+                    method: "GET",
+                    signal: AbortSignal.timeout(15000)
+                });
+                if (response.ok) {
+                    imageUrl = url;
+                    break;
+                }
+            }
+            catch (err) {
+                console.log(`${model} failed: ${err.message}`);
+            }
+        }
+        if (!imageUrl) {
+            return res.status(500).json({
+                message: "All image models are currently unavailable."
+            })
+        }
 
         // Call Fal AI to generate the image
-        const response = await falAI.subscribe("fal-ai/flux/schnell", {
-            input: { prompt: message }
-        });
 
-        const imageUrl = response.data.images[0].url;
 
         let chat;
         // If context is new, create a new chat document
@@ -70,4 +95,4 @@ const postImageModel = async (req, res) => {
     }
 };
 
-module.exports = postImageModel;
+module.exports = postImageModel;
