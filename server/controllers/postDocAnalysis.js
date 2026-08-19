@@ -27,6 +27,8 @@ const ai = require("../utils/geminiClient");
 const groq = require("../utils/groqClient");
 const openrouter = require("../utils/openRouter");
 const pdfParse = require("pdf-parse");
+const mammoth = require("mammoth");
+
 
 const extractTextFromPDF = async (base64Data) => {
     try {
@@ -37,6 +39,16 @@ const extractTextFromPDF = async (base64Data) => {
         return "";
     }
 };
+
+const extractTextFromDocx = async (base64Data) => {
+    try {
+        const buffer = Buffer.from(base64Data, "base64");
+        const result = await mammoth.extractRawText({ buffer: buffer });
+        return result.value || "";
+    } catch (err) {
+        return "";
+    }
+}
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -162,6 +174,24 @@ const postChat = async (req, res) => {
     const attachment = req.body.attachment || req.body.image;
     const context = req.body.context;
 
+    // Detect if it is a .docx file
+    const isDocx =
+        attachment &&
+        attachment.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+    // Extract text content if it's a Word document
+    let processedMessage = message;
+    if (isDocx) {
+        try {
+            const docxText = await extractTextFromDocx(attachment.base64);
+            if (docxText) {
+                processedMessage = `${message}\n\n[Extracted Document Content:\n${docxText}\n]`;
+            }
+        } catch (docxErr) {
+            // Silently catch error
+        }
+    }
+
     let userId = req.user.userId;
     if (!userId && req.user.id) {
         const User = require("../models/UserModel");
@@ -179,7 +209,7 @@ const postChat = async (req, res) => {
                 () =>
                     ai.models.generateContent({
                         model: "gemini-flash-latest",
-                        contents: message,
+                        contents: processedMessage,
                         config: {
                             systemInstruction:
                                 "Create only a 3-5 word title/context summary from the prompt. Do not reply to or answer the prompt.",
@@ -199,7 +229,7 @@ const postChat = async (req, res) => {
                         return await generateGroqContext(
                             groq,
                             "openai/gpt-oss-120b",
-                            message,
+                            processedMessage,
                         );
                     } catch (groqTitleErr) {
                         console.warn(
@@ -243,7 +273,7 @@ const postChat = async (req, res) => {
                     chatSession.sendMessage({
                         message: hasInlineSupport
                             ? [
-                                { text: message },
+                                { text: processedMessage },
                                 {
                                     inlineData: {
                                         data: attachment.base64,
@@ -251,7 +281,7 @@ const postChat = async (req, res) => {
                                     },
                                 },
                             ]
-                            : message,
+                            : processedMessage,
                     }),
                 1,
                 500,
@@ -305,12 +335,12 @@ const postChat = async (req, res) => {
             const groqModel = isImage ? "qwen/qwen3.6-27b" : "openai/gpt-oss-120b";
 
             // If PDF, extract text for fallback prompts
-            let fallbackMessage = message;
+            let fallbackMessage = processedMessage;
             if (isPDF) {
                 try {
                     const extractedText = await extractTextFromPDF(attachment.base64);
                     if (extractedText) {
-                        fallbackMessage = `${message}\n\n[Extracted PDF Content:\n${extractedText}\n]`;
+                        fallbackMessage = `${processedMessage}\n\n[Extracted PDF Content:\n${extractedText}\n]`;
                     }
                 } catch (pdfErr) {
                     console.warn("Could not extract PDF text for fallback:", pdfErr.message);
@@ -383,12 +413,12 @@ const postChat = async (req, res) => {
                     attachment.mimeType === "application/pdf";
 
                 // If PDF, extract text for fallback prompts
-                let fallbackMessage = message;
+                let fallbackMessage = processedMessage;
                 if (isPDF) {
                     try {
                         const extractedText = await extractTextFromPDF(attachment.base64);
                         if (extractedText) {
-                            fallbackMessage = `${message}\n\n[Extracted PDF Content:\n${extractedText}\n]`;
+                            fallbackMessage = `${processedMessage}\n\n[Extracted PDF Content:\n${extractedText}\n]`;
                         }
                     } catch (pdfErr) {
                         console.warn("Could not extract PDF text for fallback:", pdfErr.message);
