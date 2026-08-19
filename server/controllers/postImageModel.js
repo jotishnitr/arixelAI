@@ -18,7 +18,7 @@ const postImageModel = async (req, res) => {
         }
 
         // Call Fal AI to generate the image
-        const response = await falAI.subscribe("fal-ai/nano-banana-2", {
+        const response = await falAI.subscribe("fal-ai/flux/schnell", {
             input: { prompt: message }
         });
 
