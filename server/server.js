@@ -23,6 +23,8 @@ const editContext = require('./routes/editContext.js')
 const deleteChat = require('./routes/deleteChat.js')
 const serverWakeup = require('./routes/serverWakeup.js')
 const postImageModel = require('./routes/postImageModel.js')
+const postCode = require('./routes/postCode.js')
+const postDocAnalysis = require('./routes/postDocAnalysis.js')
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
@@ -71,5 +73,7 @@ app.use('/api', editContext);
 app.use('/api', deleteChat);
 app.use('/api', serverWakeup);
 app.use('/api', postImageModel);
+app.use('/api', postCode);
+app.use('/api', postDocAnalysis);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));

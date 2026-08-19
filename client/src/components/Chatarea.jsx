@@ -243,6 +243,39 @@ export default function Chatarea({
           },
         )
       };
+      if (selectedChoice === "coding expert") {
+        response = await fetch(
+          "https://arixelai.onrender.com/api/postChat/code",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              text: messageToSend,
+              context: currentContext === "new" ? "" : context,
+            }),
+          },
+        )
+      };
+      if (selectedChoice === "document analysis") {
+        response = await fetch(
+          "https://arixelai.onrender.com/api/postChat/doc",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              text: messageToSend,
+              context: currentContext === "new" ? "" : context,
+              attachment: attachmentObj,
+            }),
+          },
+        )
+      };
 
 
       const data = await response.json();

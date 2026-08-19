@@ -15,7 +15,11 @@ BEHAVIOR RULES:
 
 SCOPE:
 - If asked about ArixelAI the company/product itself and you don't have real info, say: "I don't have those details right now, but you can check ArixelAI's official channels."
-- Never invent fake specs, fake release dates, or fake technical claims about ArixelCore-1o.`;
+- Never invent fake specs, fake release dates, or fake technical claims about ArixelCore-1o.
+
+Contact / feedback redirect:
+- If user gives feedback, reports bugs, asks queries, or wants more info about the project — thank them and share: arixelai.noreply@gmail.com
+- Don't try to log/resolve it yourself, just redirect to that email.`;
 
 const mongoose = require("mongoose");
 const ChatModel = require("../models/ChatModel");
@@ -199,9 +203,9 @@ const postChat = async (req, res) => {
       model: "gemini-flash-latest",
       history: chat
         ? chat.messages.map((msg) => ({
-            role: msg.role === "model" ? "model" : "user",
-            parts: [{ text: msg.content }],
-          }))
+          role: msg.role === "model" ? "model" : "user",
+          parts: [{ text: msg.content }],
+        }))
         : [],
       config: {
         systemInstruction: SYSTEM_PROMPT,
@@ -222,14 +226,14 @@ const postChat = async (req, res) => {
           chatSession.sendMessage({
             message: isImage
               ? [
-                  { text: message },
-                  {
-                    inlineData: {
-                      data: attachment.base64,
-                      mimeType: attachment.mimeType,
-                    },
+                { text: message },
+                {
+                  inlineData: {
+                    data: attachment.base64,
+                    mimeType: attachment.mimeType,
                   },
-                ]
+                },
+              ]
               : message,
           }),
         1,
@@ -254,10 +258,10 @@ const postChat = async (req, res) => {
         role: "user",
         attachment: attachment
           ? {
-              name: attachment.name || "Attachment",
-              mimeType: attachment.mimeType,
-              base64: attachment.base64,
-            }
+            name: attachment.name || "Attachment",
+            mimeType: attachment.mimeType,
+            base64: attachment.base64,
+          }
           : null,
       },
       { content: response.text, role: "model" },
@@ -308,10 +312,10 @@ const postChat = async (req, res) => {
           role: "user",
           attachment: attachment
             ? {
-                name: attachment.name || "Attachment",
-                mimeType: attachment.mimeType,
-                base64: attachment.base64,
-              }
+              name: attachment.name || "Attachment",
+              mimeType: attachment.mimeType,
+              base64: attachment.base64,
+            }
             : null,
         },
         { content: responseText, role: "model" },
@@ -365,10 +369,10 @@ const postChat = async (req, res) => {
             role: "user",
             attachment: attachment
               ? {
-                  name: attachment.name || "Attachment",
-                  mimeType: attachment.mimeType,
-                  base64: attachment.base64,
-                }
+                name: attachment.name || "Attachment",
+                mimeType: attachment.mimeType,
+                base64: attachment.base64,
+              }
               : null,
           },
           { content: responseText, role: "model" },
@@ -455,10 +459,10 @@ const postChat = async (req, res) => {
               role: "user",
               attachment: attachment
                 ? {
-                    name: attachment.name || "Attachment",
-                    mimeType: attachment.mimeType,
-                    base64: attachment.base64,
-                  }
+                  name: attachment.name || "Attachment",
+                  mimeType: attachment.mimeType,
+                  base64: attachment.base64,
+                }
                 : null,
             },
             { content: responseText, role: "model" },
