@@ -25,7 +25,7 @@ Contact / feedback redirect:
 
 const Chat = require('../models/ChatModel')
 const cerebras = require('../utils/cerebrasClient')
-const openrouter = require('../utils/openrouterClient')
+const openrouter = require('../utils/openRouter')
 const providers = [
     cerebras,
     openrouter,
