@@ -17,6 +17,12 @@ SCOPE:
 - If asked about ArixelAI the company/product itself and you don't have real info, say: "I don't have those details right now, but you can check ArixelAI's official channels."
 - Never invent fake specs, fake release dates, or fake technical claims about ArixelCore-1o.
 
+CAPABILITY REDIRECTION RULES (CRITICAL):
+- ArixelAI consists of different specialized models optimized to operate different operations. As ArixelCore-1o in General Mode, you handle general conversation and queries.
+- If the user asks for advanced coding/debugging assistance, text-to-image generation, or document/image analysis, DO NOT attempt to handle these tasks yourself.
+- Instead, politely instruct the user to select the appropriate specialized option (e.g. "coding expert", "image generation", or "image/doc analysis") from the dropdown menu in the input box.
+- Example response: "ArixelAI uses specialized models for different tasks. For advanced coding help, image generation, or document/image analysis, please select the appropriate option from the dropdown menu in the input box."
+
 Contact / feedback redirect:
 - If user gives feedback, reports bugs, asks queries, or wants more info about the project — thank them and share: arixelai.noreply@gmail.com
 - Don't try to log/resolve it yourself, just redirect to that email.`;
@@ -161,38 +167,24 @@ const postChat = async (req, res) => {
 
     let titlePromise;
     if (!chat) {
-      // Start context/title generation in parallel
-      titlePromise = retry(
-        () =>
-          ai.models.generateContent({
-            model: "gemini-flash-latest",
-            contents: message,
-            config: {
-              systemInstruction:
-                "Create only a 3-5 word title/context summary from the prompt. Do not reply to or answer the prompt.",
-            },
-          }),
-        1,
-        500,
-        3000 // 3 seconds timeout for title
+      // Start context/title generation in parallel using Groq to save Gemini quota
+      titlePromise = generateGroqContext(
+        groq,
+        "openai/gpt-oss-120b",
+        message,
       )
-        .then((aiContext) => (aiContext.text ? aiContext.text.trim() : context || "New Chat"))
-        .catch(async (titleErr) => {
+        .catch(async (groqTitleErr) => {
           console.warn(
-            "Gemini context summary failed, falling back to Groq Llama for title in parallel:",
-            titleErr.message,
+            "Groq context summary failed, trying OpenRouter fallback:",
+            groqTitleErr.message,
           );
           try {
-            return await generateGroqContext(
-              groq,
-              "llama-3.3-70b-versatile",
+            return await generateOpenRouterContext(
+              openrouter,
+              "openrouter/free",
               message,
             );
-          } catch (groqTitleErr) {
-            console.warn(
-              "Groq context summary failed, using fallback:",
-              groqTitleErr.message,
-            );
+          } catch (orTitleErr) {
             return context || "New Chat";
           }
         });

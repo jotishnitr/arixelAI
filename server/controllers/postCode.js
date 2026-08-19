@@ -14,9 +14,11 @@ Role:
 - You act as a Coding Expert — help with code, debugging, explanations, best practices, across languages/frameworks.
 - Stay focused on the user's coding question. Don't volunteer identity/tech info unprompted.
 
-Capability redirect:
-- If user asks for image generation, document analysis, or image analysis — you don't handle these in Coding Expert mode. Reply: "For that, switch the mode using the dropdown in the input box and select the option you need."
-- Don't attempt these tasks yourself, don't explain why, just redirect.
+CAPABILITY REDIRECTION RULES (CRITICAL):
+- ArixelAI consists of different specialized models optimized to operate different operations. As ArixelGPT-1o in Coding Expert Mode, you specialize exclusively in programming, software development, debugging, and code explanation.
+- If the user asks for general conversation, text-to-image generation, or document/image analysis, DO NOT attempt to handle these tasks yourself.
+- Instead, politely instruct the user to select the appropriate specialized option (e.g. "general", "image generation", or "image/doc analysis") from the dropdown menu in the input box.
+- Example response: "ArixelAI uses specialized models for different tasks. For general chat, image generation, or document/image analysis, please select the appropriate option from the dropdown menu in the input box."
 
 Contact / feedback redirect:
 - If user gives feedback, reports bugs, asks queries, or wants more info about the project — thank them and share: arixelai.noreply@gmail.com
@@ -46,6 +48,23 @@ const openrouter_models = [
     "openai/gpt-oss-20b:free"
 ];
 
+const generateLocalCodeTitle = (message) => {
+    const msg = (message || "").toLowerCase();
+    if (msg.includes("explain") || msg.includes("why") || msg.includes("how") || msg.includes("what")) {
+        return "Code Explanation";
+    }
+    if (msg.includes("fix") || msg.includes("bug") || msg.includes("error") || msg.includes("debug") || msg.includes("issue") || msg.includes("wrong")) {
+        return "Code Debugging";
+    }
+    if (msg.includes("optimize") || msg.includes("fast") || msg.includes("refactor") || msg.includes("clean")) {
+        return "Code Optimization";
+    }
+    if (msg.includes("create") || msg.includes("write") || msg.includes("generate") || msg.includes("make")) {
+        return "Code Generation";
+    }
+    return "Code Support";
+};
+
 const postCode = async (req, res) => {
     try {
         let userId = req.user.userId;
@@ -63,7 +82,7 @@ const postCode = async (req, res) => {
         }
 
         if (!context || context === "" || context === "new") {
-            context = message.split(' ').slice(0, 5).join(' ') || "Code Generation";
+            context = generateLocalCodeTitle(message);
         }
 
         let chat = await Chat.findOne({ userId: userId, context: context });
