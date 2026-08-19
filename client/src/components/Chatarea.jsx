@@ -6,6 +6,7 @@ import compassIcon from "../assets/compassIcon.png";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import "./Chatarea.css";
 import Markdown from "react-markdown";
 import recognition from "../utils/speechRecognition";
@@ -21,8 +22,8 @@ export default function Chatarea({
   setIsSidebarOpen,
 }) {
   const [chatInput, setChatInput] = useState("");
+  const [chatHistory, setChatHistory] = useState([]);
 
-  const [chatHistory, setChatHistory] = useState([""]);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -34,6 +35,25 @@ export default function Chatarea({
 
   // for text-speech convertion (state)
   const [isListening, setIsListening] = useState(false);
+
+  const [selectedChoice, setSelectedChoice] = useState("general");
+  const [showChoiceDropdown, setShowChoiceDropdown] = useState(false);
+  const choiceDropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        choiceDropdownRef.current &&
+        !choiceDropdownRef.current.contains(event.target)
+      ) {
+        setShowChoiceDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const startListening = () => {
     if (!recognition) {
@@ -162,10 +182,10 @@ export default function Chatarea({
     const base64Image = selectedFile ? await fileToBase64(selectedFile) : null;
     const attachmentObj = selectedFile
       ? {
-          name: selectedFile.name,
-          mimeType: selectedFile.type,
-          base64: base64Image,
-        }
+        name: selectedFile.name,
+        mimeType: selectedFile.type,
+        base64: base64Image,
+      }
       : null;
 
     const userMessage = {
@@ -188,22 +208,43 @@ export default function Chatarea({
     setSelectedFile(null);
     setShowPopup(false);
 
+    let response;
     try {
-      const response = await fetch(
-        "https://arixelai.onrender.com/api/postChat",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+      if (selectedChoice === "general") {
+        response = await fetch(
+          "https://arixelai.onrender.com/api/postChat/general",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              text: messageToSend,
+              context: currentContext === "new" ? "" : context,
+              attachment: attachmentObj,
+            }),
           },
-          credentials: "include",
-          body: JSON.stringify({
-            text: messageToSend,
-            context: currentContext === "new" ? "" : context,
-            attachment: attachmentObj,
-          }),
-        },
-      );
+        )
+      };
+      if (selectedChoice === "image generation") {
+        response = await fetch(
+          "https://arixelai.onrender.com/api/postChat/image",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              text: messageToSend,
+              context: currentContext === "new" ? "" : context,
+            }),
+          },
+        )
+      };
+
+
       const data = await response.json();
       if (response.ok) {
         setContext(data.context);
@@ -296,141 +337,183 @@ export default function Chatarea({
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
-      {currentState === "hero" && (
-        <div className="hero-container">
-          <div className="logo-display-container">
-            <img src={icon} alt="Axiel AI Icon" />
-          </div>
-          <div className="welcome-text-container">
-            <h1>Welcome back, {name || "Guest"}! How can I help you today?</h1>
-          </div>
-          <div className="tagline-container">
-            Start a new conversation or pick a suggested task below to get
-            things moving.
-          </div>
-          <div className="suggestions-container">
-            <div
-              className="suggestion-card"
-              onClick={() => handleSubmit("Write a marketing email")}
-            >
-              <div className="card-icon-container">
-                <img src={emailIcon} alt="email-icon" />
-              </div>
-              <div className="card-content">
-                <div className="suggestion-text-container">
-                  Write a marketing email
-                </div>
-                <div className="suggestion-desc-container">
-                  Generate a high-converting announcement for a new product
-                  launch.
-                </div>
-              </div>
+      <AnimatePresence mode="wait">
+        {currentState === "hero" && (
+          <motion.div
+            className="hero-container"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div className="logo-display-container">
+              <img src={icon} alt="Axiel AI Icon" />
             </div>
-            <div
-              className="suggestion-card"
-              onClick={() => handleSubmit("Debug my Python script")}
-            >
-              <div className="card-icon-container">
-                <img src={codeIcon} alt="code-icon" />
-              </div>
-              <div className="card-content">
-                <div className="suggestion-text-container">
-                  Debug my Python script
-                </div>
-                <div className="suggestion-desc-container">
-                  Upload a snippet and I'll find potential bottlenecks or logic
-                  errors.
-                </div>
-              </div>
+            <div className="welcome-text-container">
+              <h1>
+                Welcome back, {name || "Guest"}! How can I help you today?
+              </h1>
             </div>
-            <div
-              className="suggestion-card"
-              onClick={() => handleSubmit("Summarize this article")}
-            >
-              <div className="card-icon-container">
-                <img src={docIcon} alt="doc-icon" />
-              </div>
-              <div className="card-content">
-                <div className="suggestion-text-container">
-                  Summarize this article
-                </div>
-                <div className="suggestion-desc-container">
-                  Paste a long-form URL or text and get the key bullet points
-                  instantly.
-                </div>
-              </div>
+            <div className="tagline-container">
+              Start a new conversation or pick a suggested task below to get
+              things moving.
             </div>
-            <div
-              className="suggestion-card"
-              onClick={() => handleSubmit("Plan a 3-day trip")}
-            >
-              <div className="card-icon-container">
-                <img src={compassIcon} alt="compass-icon" />
-              </div>
-              <div className="card-content">
-                <div className="suggestion-text-container">
-                  Plan a 3-day trip
-                </div>
-                <div className="suggestion-desc-container">
-                  Customized itinerary based on your interests and budget
-                  constraints.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {currentState === "chat" && (
-        <div className="chat-messages-container">
-          {chatHistory.map((msg, index) => (
-            <div
-              key={index}
-              className={`chat-message-row ${msg.role === "user" ? "user-row" : "ai-row"}`}
-            >
-              {msg.role !== "user" && (
-                <div className="message-avatar">
-                  <img src={icon} alt="AI Avatar" className="ai-avatar-icon" />
-                </div>
-              )}
+            <div className="suggestions-container">
               <div
-                className={`chat-bubble ${msg.role === "user" ? "user-bubble" : "ai-bubble"}`}
+                className="suggestion-card"
+                onClick={() => handleSubmit("Write a marketing email")}
               >
-                {msg.attachment && (
-                  <div className="chat-attachment-preview">
-                    {msg.attachment.mimeType &&
-                    msg.attachment.mimeType.startsWith("image/") ? (
-                      <img
-                        src={`data:${msg.attachment.mimeType};base64,${msg.attachment.base64}`}
-                        alt={msg.attachment.name}
-                        className="chat-attached-image"
-                      />
-                    ) : (
-                      <div className="chat-attached-file">
-                        <span className="file-icon">📄</span>
-                        <span className="file-name">{msg.attachment.name}</span>
-                      </div>
-                    )}
+                <div className="card-icon-container">
+                  <img src={emailIcon} alt="email-icon" />
+                </div>
+                <div className="card-content">
+                  <div className="suggestion-text-container">
+                    Write a marketing email
+                  </div>
+                  <div className="suggestion-desc-container">
+                    Generate a high-converting announcement for a new product
+                    launch.
+                  </div>
+                </div>
+              </div>
+              <div
+                className="suggestion-card"
+                onClick={() => handleSubmit("Debug my Python script")}
+              >
+                <div className="card-icon-container">
+                  <img src={codeIcon} alt="code-icon" />
+                </div>
+                <div className="card-content">
+                  <div className="suggestion-text-container">
+                    Debug my Python script
+                  </div>
+                  <div className="suggestion-desc-container">
+                    Upload a snippet and I'll find potential bottlenecks or
+                    logic errors.
+                  </div>
+                </div>
+              </div>
+              <div
+                className="suggestion-card"
+                onClick={() => handleSubmit("Summarize this article")}
+              >
+                <div className="card-icon-container">
+                  <img src={docIcon} alt="doc-icon" />
+                </div>
+                <div className="card-content">
+                  <div className="suggestion-text-container">
+                    Summarize this article
+                  </div>
+                  <div className="suggestion-desc-container">
+                    Paste a long-form URL or text and get the key bullet
+                    points instantly.
+                  </div>
+                </div>
+              </div>
+              <div
+                className="suggestion-card"
+                onClick={() => handleSubmit("Plan a 3-day trip")}
+              >
+                <div className="card-icon-container">
+                  <img src={compassIcon} alt="compass-icon" />
+                </div>
+                <div className="card-content">
+                  <div className="suggestion-text-container">
+                    Plan a 3-day trip
+                  </div>
+                  <div className="suggestion-desc-container">
+                    Customized itinerary based on your interests and budget
+                    constraints.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {currentState === "chat" && (
+          <motion.div
+            className="chat-messages-container"
+            key={context || "chat"}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.5 }}
+          >
+            {chatHistory.map((msg, index) => (
+              <div
+                key={index}
+                className={`chat-message-row ${msg.role === "user" ? "user-row" : "ai-row"}`}
+              >
+                {msg.role !== "user" && (
+                  <div className="message-avatar">
+                    <img
+                      src={icon}
+                      alt="AI Avatar"
+                      className="ai-avatar-icon"
+                    />
                   </div>
                 )}
                 <div
-                  className={
-                    msg.role === "model" &&
-                    msg.content === "Generating response..."
-                      ? "thinking-message"
-                      : ""
-                  }
+                  className={`chat-bubble ${msg.role === "user" ? "user-bubble" : "ai-bubble"}`}
                 >
-                  <Markdown remarkPlugins={[remarkGfm]}>
-                    {msg.content || ""}
-                  </Markdown>
+                  {msg.attachment && (
+                    <div className="chat-attachment-preview">
+                      {msg.attachment.mimeType &&
+                        msg.attachment.mimeType.startsWith("image/") ? (
+                        <img
+                          src={`data:${msg.attachment.mimeType};base64,${msg.attachment.base64}`}
+                          alt={msg.attachment.name}
+                          className="chat-attached-image"
+                        />
+                      ) : (
+                        <div className="chat-attached-file">
+                          <span className="file-icon">📄</span>
+                          <span className="file-name">
+                            {msg.attachment.name}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div
+                    className={
+                      msg.role === "model" &&
+                        msg.content === "Generating response..."
+                        ? "thinking-message"
+                        : ""
+                    }
+                  >
+                    {msg.content && /^https?:\/\/[^\s]+$/i.test(msg.content.trim()) ? (
+                      <div className="chat-image-response">
+                        <img
+                          src={msg.content.trim()}
+                          alt="AI Generated"
+                          className="chat-generated-image"
+                          loading="lazy"
+                        />
+                        <a
+                          href={msg.content.trim()}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="download-image-btn"
+                        >
+                          Open image in new tab ↗
+                        </a>
+                      </div>
+                    ) : (
+                      <Markdown remarkPlugins={[remarkGfm]}>
+                        {msg.content || ""}
+                      </Markdown>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
-      )}
+            ))}
+            <div ref={messagesEndRef} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="chat-input-wrapper">
         {showPopup && (
@@ -524,6 +607,72 @@ export default function Chatarea({
               onKeyDown={handleKeyDown}
               onChange={(e) => setChatInput(e.target.value)}
             />
+
+            <div className="choice-dropdown-wrapper" ref={choiceDropdownRef}>
+              <button
+                className="choice-dropdown-btn"
+                type="button"
+                onClick={() => setShowChoiceDropdown(!showChoiceDropdown)}
+                aria-label="Select mode"
+              >
+                <span className="current-choice-text">
+                  {selectedChoice === "general" && "✨ "}
+                  {selectedChoice === "coding expert" && "💻 "}
+                  {selectedChoice === "image generation" && "🎨 "}
+                  {selectedChoice === "image/doc analysis" && "🔍 "}
+                  {selectedChoice}
+                </span>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`chevron-icon ${showChoiceDropdown ? "open" : ""}`}
+                >
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+
+              {showChoiceDropdown && (
+                <div className="choice-dropdown-popup">
+                  {[
+                    "general",
+                    "coding expert",
+                    "image generation",
+                    "image/doc analysis",
+                  ].map((choice) => (
+                    <button
+                      key={choice}
+                      className={`choice-option-btn ${selectedChoice === choice ? "active" : ""}`}
+                      type="button"
+                      onClick={() => {
+                        setSelectedChoice(choice);
+                        setShowChoiceDropdown(false);
+                      }}
+                    >
+                      {choice === "general" && (
+                        <span className="option-icon">✨</span>
+                      )}
+                      {choice === "coding expert" && (
+                        <span className="option-icon">💻</span>
+                      )}
+                      {choice === "image generation" && (
+                        <span className="option-icon">🎨</span>
+                      )}
+                      {choice === "image/doc analysis" && (
+                        <span className="option-icon">🔍</span>
+                      )}
+                      <span className="option-text">{choice}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button
               className={`mic-btn ${isListening ? "listening" : ""}`}
               aria-label={isListening ? "Stop listening" : "Start listening"}

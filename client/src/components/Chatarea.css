@@ -790,3 +790,170 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* Choice Dropdown Styling */
+.choice-dropdown-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.choice-dropdown-btn {
+    background-color: rgba(208, 188, 255, 0.08);
+    border: 1px solid rgba(208, 188, 255, 0.15);
+    border-radius: 20px;
+    padding: 8px 14px;
+    color: #CBC3D7;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    font-weight: 500;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+    text-transform: capitalize;
+}
+
+.choice-dropdown-btn:hover {
+    background-color: rgba(208, 188, 255, 0.15);
+    border-color: rgba(208, 188, 255, 0.3);
+    color: #FFFFFF;
+    transform: translateY(-1px);
+}
+
+.choice-dropdown-btn:active {
+    transform: translateY(0);
+}
+
+.choice-dropdown-btn .chevron-icon {
+    transition: transform 0.25s ease;
+    opacity: 0.7;
+}
+
+.choice-dropdown-btn .chevron-icon.open {
+    transform: rotate(180deg);
+}
+
+.choice-dropdown-popup {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    right: 0;
+    background: rgba(28, 43, 60, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(208, 188, 255, 0.18);
+    border-radius: 16px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 190px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(208, 188, 255, 0.05);
+    z-index: 1000;
+    animation: dropdownSlideUp 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: bottom right;
+}
+
+@keyframes dropdownSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.choice-option-btn {
+    background: transparent;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    color: #CBC3D7;
+    font-size: 13.5px;
+    font-weight: 500;
+    text-align: left;
+    text-transform: capitalize;
+    transition: all 0.2s ease;
+    width: 100%;
+}
+
+.choice-option-btn:hover {
+    background-color: rgba(208, 188, 255, 0.08);
+    color: #FFFFFF;
+    padding-left: 16px;
+}
+
+.choice-option-btn.active {
+    background-color: rgba(208, 188, 255, 0.15);
+    color: #D0BCFF;
+}
+
+.choice-option-btn .option-icon {
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.choice-option-btn .option-text {
+    flex-grow: 1;
+}
+
+/* AI Generated Image Response Styles */
+.chat-image-response {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+    margin: 8px 0;
+    max-width: 100%;
+}
+
+.chat-generated-image {
+    max-width: 100%;
+    max-height: 480px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    object-fit: contain;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+}
+
+.chat-generated-image:hover {
+    transform: scale(1.015);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 20px rgba(208, 188, 255, 0.1);
+}
+
+.download-image-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: rgba(208, 188, 255, 0.1);
+    border: 1px solid rgba(208, 188, 255, 0.2);
+    color: #D0BCFF;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.download-image-btn:hover {
+    background-color: rgba(208, 188, 255, 0.2);
+    border-color: rgba(208, 188, 255, 0.4);
+    color: #FFFFFF;
+    transform: translateY(-1px);
+}
+
+.download-image-btn:active {
+    transform: translateY(0);
+}

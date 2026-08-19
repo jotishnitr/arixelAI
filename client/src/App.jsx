@@ -10,6 +10,20 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState("Register");
 
   useEffect(() => {
+    async function wakeupServer() {
+      try {
+        await fetch("https://arixelai.onrender.com/api/ping");
+      }
+      catch (error) {
+        console.error("Error waking up server:", error);
+        alert("Server is sleeping , Please refresh the page again.")
+      }
+    }
+    wakeupServer();
+  }, []);
+
+
+  useEffect(() => {
     async function verification() {
       // Check if URL is for resetting password
       if (window.location.hash.startsWith("#/reset-password")) {
