@@ -259,7 +259,7 @@ export default function Chatarea({
           },
         )
       };
-      if (selectedChoice === "document analysis") {
+      if (selectedChoice === "image/doc analysis") {
         response = await fetch(
           "https://arixelai.onrender.com/api/postChat/doc",
           {
@@ -649,11 +649,13 @@ export default function Chatarea({
                 aria-label="Select mode"
               >
                 <span className="current-choice-text">
-                  {selectedChoice === "general" && "✨ "}
-                  {selectedChoice === "coding expert" && "💻 "}
-                  {selectedChoice === "image generation" && "🎨 "}
-                  {selectedChoice === "image/doc analysis" && "🔍 "}
-                  {selectedChoice}
+                  <span className="choice-icon">
+                    {selectedChoice === "general" && "✨"}
+                    {selectedChoice === "coding expert" && "💻"}
+                    {selectedChoice === "image generation" && "🎨"}
+                    {selectedChoice === "image/doc analysis" && "🔍"}
+                  </span>
+                  <span className="choice-text-label">{selectedChoice}</span>
                 </span>
                 <svg
                   width="12"

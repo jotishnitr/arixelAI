@@ -685,6 +685,11 @@
         gap: 12px;
     }
 
+    .suggestion-card {
+        align-items: center;
+        text-align: center;
+    }
+
     .welcome-text-container h1 {
         font-size: 24px !important;
         line-height: 1.3;
@@ -956,4 +961,21 @@
 
 .download-image-btn:active {
     transform: translateY(0);
+}
+
+@media (max-width: 600px) {
+    .choice-text-label {
+        display: none;
+    }
+    .choice-dropdown-btn {
+        padding: 8px 10px;
+        gap: 4px;
+    }
+    .current-choice-text {
+        display: flex;
+        align-items: center;
+    }
+    .input-row {
+        gap: 8px;
+    }
 }
