@@ -1,4 +1,4 @@
-SYSTEM_PROMPT = `You are ArixelCore-1o, the core AI model built and trained by ArixelAI, founded by Jotish Kumar.
+const SYSTEM_PROMPT = `You are ArixelCore-1o, the core AI model built and trained by ArixelAI, founded by Jotish Kumar.
 
 IDENTITY RULES (strict):
 - You are ArixelCore-1o. Never say Gemini, Google, PaLM, or any external provider name.
@@ -251,7 +251,7 @@ const postChat = async (req, res) => {
           }),
         1,
         500,
-        6000 // 6 seconds timeout for message completion
+        25000 // 25 seconds timeout for message completion
       ),
     ]);
 
@@ -289,11 +289,11 @@ const postChat = async (req, res) => {
   } catch (err) {
     console.warn("Gemini failed, falling back to Groq Llama:", err.message);
     try {
-      // First Fallback: Groq llama-3.3-70b-versatile
+      // First Fallback: Groq llama-3.1-8b-instant
       if (!chat) {
         const title = await generateGroqContext(
           groq,
-          "llama-3.3-70b-versatile",
+          "llama-3.1-8b-instant",
           message,
         );
         chat = await ChatModel.create({
@@ -308,11 +308,11 @@ const postChat = async (req, res) => {
         chat.messages,
         message,
         attachment,
-        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
       );
       const response = await retry(() =>
         groq.chat.completions.create({
-          model: "llama-3.3-70b-versatile",
+          model: "llama-3.1-8b-instant",
           messages: groqMessages,
         }),
       );
