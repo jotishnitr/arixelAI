@@ -4,6 +4,7 @@ import historyIcon from "../assets/history.png";
 import settingsIcon from "../assets/settings.png";
 import profileIcon from "../assets/profile.png";
 import { useState, useEffect, useRef } from "react";
+import { API_BASE_URL } from "../config";
 export default function Sidebar({ context, setContext, currentState, setCurrentState, currentContext, setCurrentContext, contextHistory, setContextHistory, getContextHistory, isSidebarOpen, setIsSidebarOpen }) {
   const [currentChat, setCurrentChat] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -24,7 +25,7 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
     const newTitle = prompt("Edit chat title:", currentTitle);
     if (newTitle && newTitle.trim() && newTitle.trim() !== currentTitle) {
       try {
-        await fetch(`https://arixelai.onrender.com/api/editContext`, {
+        await fetch(`${API_BASE_URL}/api/editContext`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -56,7 +57,7 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
 
     if (window.confirm("Are you sure you want to delete this chat?")) {
       try {
-        await fetch(`https://arixelai.onrender.com/api/deleteChat`, {
+        await fetch(`${API_BASE_URL}/api/deleteChat`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           credentials: "include",

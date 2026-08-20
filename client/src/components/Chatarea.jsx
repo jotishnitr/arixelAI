@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "motion/react";
 import "./Chatarea.css";
 import Markdown from "react-markdown";
 import recognition from "../utils/speechRecognition";
+import { API_BASE_URL } from "../config";
 export default function Chatarea({
   setContext,
   context,
@@ -144,7 +145,7 @@ export default function Chatarea({
 
   useEffect(() => {
     async function getUserName() {
-      const res = await fetch("https://arixelai.onrender.com/api/getProfile", {
+      const res = await fetch(`${API_BASE_URL}/api/getProfile`, {
         method: "GET",
         credentials: "include",
       });
@@ -212,7 +213,7 @@ export default function Chatarea({
     try {
       if (selectedChoice === "general") {
         response = await fetch(
-          "https://arixelai.onrender.com/api/postChat/general",
+          `${API_BASE_URL}/api/postChat/general`,
           {
             method: "POST",
             headers: {
@@ -229,7 +230,7 @@ export default function Chatarea({
       };
       if (selectedChoice === "image generation") {
         response = await fetch(
-          "https://arixelai.onrender.com/api/postChat/image",
+          `${API_BASE_URL}/api/postChat/image`,
           {
             method: "POST",
             headers: {
@@ -245,7 +246,7 @@ export default function Chatarea({
       };
       if (selectedChoice === "coding expert") {
         response = await fetch(
-          "https://arixelai.onrender.com/api/postChat/code",
+          `${API_BASE_URL}/api/postChat/code`,
           {
             method: "POST",
             headers: {
@@ -261,7 +262,7 @@ export default function Chatarea({
       };
       if (selectedChoice === "image/doc analysis") {
         response = await fetch(
-          "https://arixelai.onrender.com/api/postChat/doc",
+          `${API_BASE_URL}/api/postChat/doc`,
           {
             method: "POST",
             headers: {
@@ -272,6 +273,22 @@ export default function Chatarea({
               text: messageToSend,
               context: currentContext === "new" ? "" : context,
               attachment: attachmentObj,
+            }),
+          },
+        )
+      };
+      if (selectedChoice === "Math/Reasoning") {
+        response = await fetch(
+          `${API_BASE_URL}/api/postChat/reasoning`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              text: messageToSend,
+              context: currentContext === "new" ? "" : context,
             }),
           },
         )
@@ -315,7 +332,7 @@ export default function Chatarea({
 
     try {
       const response = await fetch(
-        "https://arixelai.onrender.com/api/getChatHistory",
+        `${API_BASE_URL}/api/getChatHistory`,
         {
           method: "POST",
           headers: {
@@ -654,6 +671,7 @@ export default function Chatarea({
                     {selectedChoice === "coding expert" && "💻"}
                     {selectedChoice === "image generation" && "🎨"}
                     {selectedChoice === "image/doc analysis" && "🔍"}
+                    {selectedChoice === "Math/Reasoning" && "🧠"}
                   </span>
                   <span className="choice-text-label">{selectedChoice}</span>
                 </span>
@@ -679,6 +697,7 @@ export default function Chatarea({
                     "coding expert",
                     "image generation",
                     "image/doc analysis",
+                    "Math/Reasoning",
                   ].map((choice) => (
                     <button
                       key={choice}
@@ -700,6 +719,9 @@ export default function Chatarea({
                       )}
                       {choice === "image/doc analysis" && (
                         <span className="option-icon">🔍</span>
+                      )}
+                      {choice === "Math/Reasoning" && (
+                        <span className="option-icon">🧠</span>
                       )}
                       <span className="option-text">{choice}</span>
                     </button>

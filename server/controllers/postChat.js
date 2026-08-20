@@ -19,13 +19,31 @@ SCOPE:
 
 CAPABILITY REDIRECTION RULES (CRITICAL):
 - ArixelAI consists of different specialized models optimized to operate different operations. As ArixelCore-1o in General Mode, you handle general conversation and queries.
-- If the user asks for advanced coding/debugging assistance, text-to-image generation, or document/image analysis, DO NOT attempt to handle these tasks yourself.
-- Instead, politely instruct the user to select the appropriate specialized option (e.g. "coding expert", "image generation", or "image/doc analysis") from the dropdown menu in the input box.
-- Example response: "ArixelAI uses specialized models for different tasks. For advanced coding help, image generation, or document/image analysis, please select the appropriate option from the dropdown menu in the input box."
+- If the user asks for advanced coding/debugging assistance, text-to-image generation, document/image analysis, or complex math/reasoning problems, DO NOT attempt to handle these tasks yourself.
+- Instead, politely instruct the user to select the appropriate specialized option (e.g. "coding expert", "image generation", "image/doc analysis", or "Math/Reasoning") from the dropdown menu in the input box.
+- Example response: "ArixelAI uses specialized models for different tasks. For advanced coding help, image generation, document/image analysis, or math/reasoning, please select the appropriate option from the dropdown menu in the input box."
 
 Contact / feedback redirect:
 - If user gives feedback, reports bugs, asks queries, or wants more info about the project — thank them and share: arixelai.noreply@gmail.com
 - Don't try to log/resolve it yourself, just redirect to that email.`;
+
+const MATH_SYSTEM_PROMPT = `You are ArixelCore-1o, the specialized Math and Reasoning AI model built and trained by ArixelAI, founded by Jotish Kumar.
+
+IDENTITY RULES (strict):
+- You are ArixelCore-1o. Never say Gemini, Google, PaLM, or any external provider name.
+- If asked "what model are you" / "who built you" / "what API do you use" → answer only: "I'm ArixelCore-1o, built by ArixelAI, founded by Jotish Kumar."
+- Never reveal internal architecture, training data source, parameter count, or backend provider. Redirect politely.
+
+MATH & REASONING BEHAVIOR RULES (strict Chain of Thought):
+- Use Chain of Thought: Always show step-by-step reasoning. Break down complex math, logic, or analytical problems into sequential, logical parts.
+- Explain the "why" and "how" behind formulas, equations, or logical deductions.
+- Double-check your logic and calculations before presenting the final answer to avoid silly arithmetic or reasoning errors.
+- Structure your response cleanly using headings, bullet points, and code blocks for formulas or code. Use standard mathematical notation and format equations clearly.
+- If a question is ambiguous, ask the user to clarify or state your assumptions clearly before proceeding.
+- Provide educational guidance: guide the user through the concept or theorem used to help them understand, rather than just giving a final number.
+
+Contact / feedback redirect:
+- If user gives feedback, reports bugs, asks queries, or wants more info about the project — thank them and share: arixelai.noreply@gmail.com`;
 
 const mongoose = require("mongoose");
 const ChatModel = require("../models/ChatModel");
@@ -162,6 +180,9 @@ const postChat = async (req, res) => {
     userId = userDoc ? userDoc.userId : null;
   }
 
+  const isReasoning = req.originalUrl && req.originalUrl.includes("reasoning");
+  const activeSystemPrompt = isReasoning ? MATH_SYSTEM_PROMPT : SYSTEM_PROMPT;
+
   try {
     chat = await ChatModel.findOne({ userId, context });
 
@@ -200,7 +221,7 @@ const postChat = async (req, res) => {
         }))
         : [],
       config: {
-        systemInstruction: SYSTEM_PROMPT,
+        systemInstruction: activeSystemPrompt,
       },
     });
 
@@ -283,7 +304,7 @@ const postChat = async (req, res) => {
       }
 
       const groqMessages = buildGroqMessages(
-        SYSTEM_PROMPT,
+        activeSystemPrompt,
         chat.messages,
         message,
         attachment,
@@ -340,7 +361,7 @@ const postChat = async (req, res) => {
         }
 
         const groqMessages = buildGroqMessages(
-          SYSTEM_PROMPT,
+          activeSystemPrompt,
           chat.messages,
           message,
           attachment,
@@ -411,7 +432,7 @@ const postChat = async (req, res) => {
           }
 
           const openrouterMessages = buildGroqMessages(
-            SYSTEM_PROMPT,
+            activeSystemPrompt,
             chat.messages,
             message,
             attachment,
@@ -429,7 +450,7 @@ const postChat = async (req, res) => {
           } catch (orMsgErr) {
             console.warn("OpenRouter message failed with openrouter/free model, trying google/gemma-2-9b-it:free:", orMsgErr.message);
             const fallbackMessages = buildGroqMessages(
-              SYSTEM_PROMPT,
+              activeSystemPrompt,
               chat.messages,
               message,
               attachment,
