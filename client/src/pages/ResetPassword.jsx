@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import logoIcon from "../assets/icon.png";
 import "./ForgotPassword.css"; // We can reuse standard forgot-password styles or load dedicated styles
+import { useNavigate } from "react-router-dom";
 
-export default function ResetPassword({ setCurrentPage }) {
+export default function ResetPassword() {
+    const navigate = useNavigate();
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -165,7 +167,7 @@ export default function ResetPassword({ setCurrentPage }) {
                         <span className="link" onClick={() => {
                             // Reset pathname so it doesn't try to load reset-password on page refresh
                             window.history.replaceState({}, document.title, window.location.pathname);
-                            setCurrentPage("Login");
+                            navigate("/login");
                         }}>
                             Back to Sign In
                         </span>

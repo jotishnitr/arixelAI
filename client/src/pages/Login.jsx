@@ -1,8 +1,11 @@
 import { useState } from "react";
 import logoIcon from "../assets/icon.png";
 import "./Login.css";
+import { Link, useNavigate } from "react-router-dom";
 
-export default function Login({ setCurrentPage }) {
+
+export default function Login() {
+    const navigate = useNavigate();
     const [formData, setFormData] = useState({
         email: "",
         password: "",
@@ -35,7 +38,7 @@ export default function Login({ setCurrentPage }) {
             });
             const data = await response.json();
             if (response.ok && data.success) {
-                setCurrentPage("homePage");
+                navigate("/");
             } else {
                 setError(data.message || "Invalid email or password");
             }
@@ -94,7 +97,7 @@ export default function Login({ setCurrentPage }) {
                         <div className="input-group">
                             <div className="label-row">
                                 <label htmlFor="password">Password</label>
-                                <span className="forgot-password" onClick={() => setCurrentPage("ForgotPassword")}>Forgot Password?</span>
+                                <Link className="forgot-password" to="/forgot-password">Forgot Password?</Link>
                             </div>
                             <div className="input-wrapper">
                                 <svg
@@ -193,7 +196,7 @@ export default function Login({ setCurrentPage }) {
                 </div>
 
                 <p className="footer-text">
-                    Don't have an account? <span className="link" onClick={() => setCurrentPage("Register")}>Sign up now</span>
+                    Don't have an account? <Link className="link" to="/register">Sign up now</Link>
                 </p>
 
                 <div className="security-badges">

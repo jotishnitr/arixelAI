@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { Routes, Route, useNavigate } from "react-router-dom";
 
 import Homepage from "./pages/Homepage";
 import Register from "./pages/Register";
@@ -7,12 +8,13 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState("Register");
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function wakeupServer() {
       try {
         await fetch("https://arixelai.onrender.com/api/ping");
+        console.log("Server is awake");
       }
       catch (error) {
         console.error("Error waking up server:", error);
@@ -27,7 +29,7 @@ export default function App() {
     async function verification() {
       // Check if URL is for resetting password
       if (window.location.hash.startsWith("#/reset-password")) {
-        setCurrentPage("ResetPassword");
+        navigate("/reset-password" + window.location.hash.replace("#/reset-password", ""));
         return;
       }
 
@@ -40,20 +42,20 @@ export default function App() {
       })
       const data = await response.json();
       if (response.ok) {
-        setCurrentPage("homePage");
+        navigate("/");
       }
     }
     verification();
-  }, []);
+  }, [navigate]);
 
 
   return (
-    <>
-      {currentPage === "Register" && <Register setCurrentPage={setCurrentPage} />}
-      {currentPage === "Login" && <Login setCurrentPage={setCurrentPage} />}
-      {currentPage === "ForgotPassword" && <ForgotPassword setCurrentPage={setCurrentPage} />}
-      {currentPage === "ResetPassword" && <ResetPassword setCurrentPage={setCurrentPage} />}
-      {currentPage === "homePage" && <Homepage />}
-    </>
+    <Routes>
+      <Route path="/register" element={<Register />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/" element={<Homepage />} />
+    </Routes>
   );
 }

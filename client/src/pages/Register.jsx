@@ -1,8 +1,11 @@
 import { useState } from "react";
 import logoIcon from "../assets/icon.png";
 import "./Register.css";
+import { Link, useNavigate } from "react-router-dom";
 
-export default function Register({ setCurrentPage }) {
+
+export default function Register() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -44,7 +47,7 @@ export default function Register({ setCurrentPage }) {
       });
       const data = await response.json();
       if (response.ok && data.message === "User created successfully") {
-        setCurrentPage("Login");
+        navigate("/login");
       } else {
         setError(data.message || "Registration failed");
       }
@@ -285,7 +288,7 @@ export default function Register({ setCurrentPage }) {
         </div>
 
         <p className="footer-text">
-          Already have an account? <span className="link" onClick={() => setCurrentPage("Login")}>Sign in now</span>
+          Already have an account? <Link className="link" to="/login">Sign in now</Link>
         </p>
 
         <div className="security-badges">

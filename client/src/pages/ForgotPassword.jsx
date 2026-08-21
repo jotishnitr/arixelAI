@@ -1,8 +1,10 @@
 import { useState } from "react";
 import logoIcon from "../assets/icon.png";
 import "./ForgotPassword.css";
+import { Link } from "react-router-dom";
 
-export default function ForgotPassword({ setCurrentPage }) {
+
+export default function ForgotPassword() {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState("");
@@ -90,9 +92,9 @@ export default function ForgotPassword({ setCurrentPage }) {
 
                     <p className="footer-text">
                         Remember your password?{" "}
-                        <span className="link" onClick={() => setCurrentPage("Login")}>
+                        <Link className="link" to="/login">
                             Back to Sign In
-                        </span>
+                        </Link>
                     </p>
                 </div>
             </div>
