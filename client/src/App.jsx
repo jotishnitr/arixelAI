@@ -6,6 +6,7 @@ import Register from "./pages/Register";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import Policies from "./pages/Policies";
 
 export default function App() {
   const navigate = useNavigate();
@@ -42,7 +43,13 @@ export default function App() {
       })
       const data = await response.json();
       if (response.ok) {
-        navigate("/");
+        if (window.location.pathname === "/arixelAI/login" || window.location.pathname === "/arixelAI/register") {
+          navigate("/");
+        }
+      } else {
+        if (window.location.pathname === "/arixelAI/" || window.location.pathname === "/arixelAI") {
+          navigate("/login");
+        }
       }
     }
     verification();
@@ -55,6 +62,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/policies" element={<Policies />} />
       <Route path="/" element={<Homepage />} />
     </Routes>
   );

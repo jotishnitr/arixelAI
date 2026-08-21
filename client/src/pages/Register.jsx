@@ -16,6 +16,7 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [acceptPolicies, setAcceptPolicies] = useState(false);
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -29,6 +30,10 @@ export default function Register() {
     event.preventDefault();
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match");
+      return;
+    }
+    if (!acceptPolicies) {
+      setError("Please accept the App Policies, Terms & Conditions to proceed.");
       return;
     }
     setLoading(true);
@@ -245,6 +250,19 @@ export default function Register() {
                   )}
                 </button>
               </div>
+            </div>
+ 
+            <div className="policy-checkbox-container">
+              <input
+                type="checkbox"
+                id="acceptPolicies"
+                checked={acceptPolicies}
+                onChange={(e) => setAcceptPolicies(e.target.checked)}
+                required
+              />
+              <label htmlFor="acceptPolicies">
+                I accept the <Link className="policy-link" to="/policies">App Policies, Terms & Conditions</Link>
+              </label>
             </div>
 
             <button type="submit" className="submit-btn">

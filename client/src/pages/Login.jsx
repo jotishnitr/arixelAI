@@ -14,6 +14,7 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [acceptPolicies, setAcceptPolicies] = useState(false);
 
     function handleChange(event) {
         const { name, value } = event.target;
@@ -25,6 +26,10 @@ export default function Login() {
 
     async function handleSubmit(event) {
         event.preventDefault();
+        if (!acceptPolicies) {
+            setError("Please accept the App Policies, Terms & Conditions to proceed.");
+            return;
+        }
         setLoading(true);
         setError("");
         try {
@@ -153,6 +158,19 @@ export default function Login() {
                                     )}
                                 </button>
                             </div>
+                        </div>
+
+                        <div className="policy-checkbox-container">
+                            <input
+                                type="checkbox"
+                                id="acceptPolicies"
+                                checked={acceptPolicies}
+                                onChange={(e) => setAcceptPolicies(e.target.checked)}
+                                required
+                            />
+                            <label htmlFor="acceptPolicies">
+                                I accept the <Link className="policy-link" to="/policies">App Policies, Terms & Conditions</Link>
+                            </label>
                         </div>
 
                         <button type="submit" className="submit-btn">

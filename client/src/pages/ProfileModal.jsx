@@ -74,7 +74,7 @@ export default function Profile({ setCurrentState }) {
                 credentials: "include",
             });
             if (response.ok) {
-                window.location.reload();
+                window.location.href = "/arixelAI/login";
             } else {
                 console.error("Failed to sign out");
             }
