@@ -12,7 +12,7 @@ const requestPasswordReset = async (req, res, next) => {
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
-        const secret = (process.env.JWT_SECRET || process.env.JWT_SECRET_KEY) + user.password;
+        const secret = (process.env.JWT_SECRET || process.env.JWT_SECRET_KEY) + (user.password || '');
         const token = jwt.sign({ id: user.userId, email: user.email }, secret, { expiresIn: '1h' });
 
         // URL should point to your frontend application's reset password page

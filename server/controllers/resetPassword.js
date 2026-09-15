@@ -18,7 +18,7 @@ const resetPassword = async (req, res, next) => {
         }
 
         // Verify the token using the secret that includes the user's current hashed password
-        const secret = (process.env.JWT_SECRET || process.env.JWT_SECRET_KEY) + user.password;
+        const secret = (process.env.JWT_SECRET || process.env.JWT_SECRET_KEY) + (user.password || '');
         try {
             jwt.verify(resetToken, secret);
         } catch (error) {

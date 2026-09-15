@@ -4,14 +4,25 @@ const User = require('../models/UserModel');
 
 const login = async (req, res) => {
     try {
-        const { email } = req.body;
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ success: false, message: "Email and password are required" });
+        }
+
         const user = await User.findOne({ email });
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
-        const password = user.password;
-        const hashedPassword = await bcrypt.compare(req.body.password, password);
-        if (!hashedPassword) {
+
+        if (!user.password) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "This account was registered using Google Sign-In. Please sign in with Google or reset your password." 
+            });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
             return res.status(401).json({ success: false, message: "Invalid password" });
         }
 
