@@ -103,11 +103,11 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
         <div className="history-chat-display">
           {contextHistory.map((chat) => (
             <div
-              className={
+              className={`${
                 currentChat == chat._id
                   ? "chat-container-active"
                   : "chat-container"
-              }
+              }${activeMenuId === chat._id ? " menu-open" : ""}`}
               key={chat._id}
               onClick={() => { setCurrentChat(chat._id); setContext(chat.context); setCurrentState("chat"); setCurrentContext("old"); setIsSidebarOpen(false); }}>
               <img
@@ -117,7 +117,7 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
               />
               <p className="chat-title" title={chat.context}>{chat.context}</p>
               <button
-                className="context-menu-btn"
+                className={`context-menu-btn ${activeMenuId === chat._id ? "active" : ""}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveMenuId(activeMenuId === chat._id ? null : chat._id);
@@ -133,10 +133,10 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
 
               {activeMenuId === chat._id && (
                 <div className="context-menu-dropdown" onClick={(e) => e.stopPropagation()}>
-                  <button className="menu-item" onClick={(e) => { e.stopPropagation(); setActiveMenuId(null); handleEditTitle(chat._id, chat.context); /* User stub for edit */ }}>
+                  <button className="menu-item" onClick={(e) => { e.stopPropagation(); setActiveMenuId(null); handleEditTitle(chat._id, chat.context); }}>
                     ✏️ Edit Title
                   </button>
-                  <button className="menu-item delete" onClick={(e) => { e.stopPropagation(); setActiveMenuId(null); handleDeleteChat(e, chat._id); /* User stub for delete */ }}>
+                  <button className="menu-item delete" onClick={(e) => { e.stopPropagation(); setActiveMenuId(null); handleDeleteChat(e, chat._id); }}>
                     🗑️ Delete Chat
                   </button>
                 </div>
