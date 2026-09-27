@@ -53,7 +53,7 @@ const openrouter_models = [
   "google/gemma-4-31b:free",
   "nvidia/nemotron-3-super:free",
 ];
-const generalChat = async (req, res) => {
+const postChat = async (req, res) => {
   try {
     const { text, attachment } = req.body;
     let { context } = req.body;
