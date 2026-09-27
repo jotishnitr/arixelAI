@@ -298,7 +298,19 @@ export default function Chatarea({
       const data = await response.json();
       if (response.ok) {
         setContext(data.context);
-        getChatHistory(data.context);
+        if (data.messages && data.messages.length > 0) {
+          setChatHistory(data.messages);
+        } else if (data.response) {
+          setChatHistory((prev) => [
+            ...prev.slice(0, -1),
+            {
+              role: "model",
+              content: data.response,
+            },
+          ]);
+        } else {
+          getChatHistory(data.context);
+        }
         if (currentContext === "new") {
           getContextHistory();
         }
@@ -309,6 +321,7 @@ export default function Chatarea({
           {
             role: "model",
             content:
+              data?.message ||
               "I'm really sorry, but I encountered an error while processing your request. Please try sending your message again.",
           },
         ]);
@@ -347,12 +360,9 @@ export default function Chatarea({
       const data = await response.json();
       if (response.ok && data && data.messages) {
         setChatHistory(data.messages);
-      } else {
-        setChatHistory([]);
       }
     } catch (error) {
       console.error("Error fetching chat history:", error);
-      setChatHistory([]);
     }
   }
 
@@ -484,11 +494,11 @@ export default function Chatarea({
         {currentState === "chat" && (
           <motion.div
             className="chat-messages-container"
-            key={context || "chat"}
-            initial={{ opacity: 0, y: 20 }}
+            key="chat-messages"
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.5 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
           >
             {chatHistory.map((msg, index) => (
               <div

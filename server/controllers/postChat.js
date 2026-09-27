@@ -72,9 +72,11 @@ const postChat = async (req, res) => {
       return res.status(400).json({ message: "Text or attachment is required" });
     }
 
-    let userId = req.user?.userId || req.user?.id;
-    if (!userId && req.user?._id) {
-      userId = req.user._id;
+    let userId = req.user?.userId;
+    if (!userId && (req.user?.id || req.user?._id)) {
+      const User = require("../models/UserModel");
+      const userDoc = await User.findById(req.user.id || req.user._id);
+      userId = userDoc ? userDoc.userId : null;
     }
 
     if (!context || context === "" || context === "new") {
