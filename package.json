@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "build": "npm --prefix client run build",
+    "deploy": "npm --prefix client run build"
+  },
   "devDependencies": {
     "nodemon": "^3.1.14"
   },
