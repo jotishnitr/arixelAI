@@ -6,17 +6,23 @@
 html {
     scroll-behavior: smooth;
     scrollbar-width: thin;
-    scrollbar-color: #A078FF #0b1320;
+    scrollbar-color: rgba(160, 120, 255, 0.3) transparent;
 }
 
 ::-webkit-scrollbar {
-    width: 5px;
+    width: 6px;
+    height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-    background: #0b1320;
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #A078FF;
+    background: rgba(160, 120, 255, 0.3);
+    border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(160, 120, 255, 0.5);
 }

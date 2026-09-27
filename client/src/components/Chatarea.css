@@ -361,7 +361,9 @@
     flex-direction: column;
     gap: 20px;
     overflow-y: auto;
+    overflow-x: hidden;
     padding-right: 8px;
+    box-sizing: border-box;
 }
 
 /* Scrollbar styling for message box */
@@ -374,12 +376,12 @@
 }
 
 .chat-messages-container::-webkit-scrollbar-thumb {
-    background: rgba(208, 188, 255, 0.1);
+    background: rgba(208, 188, 255, 0.15);
     border-radius: 4px;
 }
 
 .chat-messages-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(208, 188, 255, 0.2);
+    background: rgba(208, 188, 255, 0.3);
 }
 
 .chat-message-row {
@@ -387,6 +389,7 @@
     align-items: flex-start;
     gap: 12px;
     width: 100%;
+    min-width: 0;
     animation: bubbleFadeIn 0.3s ease-out;
 }
 
@@ -419,11 +422,22 @@
 }
 
 .chat-bubble {
-    max-width: 70%;
-    padding: 12px 18px;
+    max-width: 80%;
+    min-width: 0;
+    padding: 14px 20px;
     font-size: 15px;
-    line-height: 1.5;
+    line-height: 1.6;
     box-sizing: border-box;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.chat-bubble p {
+    margin: 0 0 10px 0;
+}
+
+.chat-bubble p:last-child {
+    margin-bottom: 0;
 }
 
 .chat-bubble ul,
@@ -436,6 +450,70 @@
     margin-bottom: 6px;
 }
 
+.chat-bubble h1,
+.chat-bubble h2,
+.chat-bubble h3,
+.chat-bubble h4 {
+    color: #FFFFFF;
+    margin: 14px 0 8px 0;
+    font-weight: 600;
+}
+
+.chat-bubble h1:first-child,
+.chat-bubble h2:first-child,
+.chat-bubble h3:first-child {
+    margin-top: 0;
+}
+
+.chat-bubble pre {
+    background: rgba(10, 18, 30, 0.9);
+    border: 1px solid rgba(208, 188, 255, 0.15);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin: 12px 0;
+    overflow-x: auto;
+    max-width: 100%;
+    box-sizing: border-box;
+    scrollbar-width: thin;
+}
+
+.chat-bubble pre::-webkit-scrollbar {
+    height: 5px;
+}
+
+.chat-bubble pre::-webkit-scrollbar-thumb {
+    background: rgba(208, 188, 255, 0.25);
+    border-radius: 4px;
+}
+
+.chat-bubble code {
+    font-family: 'Fira Code', Consolas, Monaco, 'Courier New', monospace;
+    font-size: 13.5px;
+    background: rgba(208, 188, 255, 0.12);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #E2D9FC;
+    word-break: break-word;
+}
+
+.chat-bubble pre code {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    color: #E2E8F0;
+    font-size: 13.5px;
+    line-height: 1.5;
+    word-break: normal;
+    white-space: pre;
+}
+
+.chat-bubble blockquote {
+    border-left: 3px solid #8b5cf6;
+    margin: 10px 0;
+    padding-left: 12px;
+    color: #CBD5E1;
+    font-style: italic;
+}
 
 .user-bubble {
     background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
