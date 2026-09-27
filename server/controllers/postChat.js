@@ -53,6 +53,16 @@ const openrouter_models = [
   "google/gemma-4-31b:free",
   "nvidia/nemotron-3-super:free",
 ];
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const generateTitle = (text) => {
+  if (!text) return "New Conversation";
+  const cleaned = text.trim().replace(/[^\w\s]/gi, "");
+  const words = cleaned.split(/\s+/).slice(0, 5).join(" ");
+  return words.length > 0 ? words : "New Conversation";
+};
+
 const postChat = async (req, res) => {
   try {
     const { text, attachment } = req.body;
