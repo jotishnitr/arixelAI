@@ -25,6 +25,7 @@ const serverWakeup = require('./routes/serverWakeup.js')
 const postImageModel = require('./routes/postImageModel.js')
 const postCode = require('./routes/postCode.js')
 const postDocAnalysis = require('./routes/postDocAnalysis.js')
+const githubRoutes = require('./routes/githubCallback.js')
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
@@ -75,5 +76,6 @@ app.use('/api', serverWakeup);
 app.use('/api', postImageModel);
 app.use('/api', postCode);
 app.use('/api', postDocAnalysis);
+app.use('/api/github', githubRoutes);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));

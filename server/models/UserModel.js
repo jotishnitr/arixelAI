@@ -8,6 +8,9 @@ const UserSchema = mongoose.Schema({
     age: { type: Number },
     country: { type: String },
     mobile: { type: String },
+    githubAccessToken: { type: String },
+    githubUsername: { type: String },
+    githubInstallationId: { type: String },
     timestamp: { type: Date, default: Date.now },
 })
 

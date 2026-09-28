@@ -28,6 +28,7 @@ Contact / feedback redirect:
 const Chat = require('../models/ChatModel')
 const cerebras = require('../utils/cerebrasClient')
 const openrouter = require('../utils/openRouter')
+const { getRepoCodeContext } = require('../utils/githubRepoHelper')
 const providers = [
     cerebras,
     openrouter,
@@ -75,10 +76,20 @@ const postCode = async (req, res) => {
         }
 
         const message = req.body.text;
+        const repo = req.body.repo;
         let context = req.body.context;
 
         if (!message) {
             return res.status(400).json({ message: "Message/prompt is required" });
+        }
+
+        const dbUserId = req.user?.id || req.user?._id;
+        let enrichedMessage = message;
+        if (repo && repo.allowReadCode && repo.fullName && dbUserId) {
+            const codeContext = await getRepoCodeContext(dbUserId, repo.fullName, repo.allowReadCode);
+            if (codeContext) {
+                enrichedMessage = (enrichedMessage ? enrichedMessage + "\n" : "") + codeContext;
+            }
         }
 
         if (!context || context === "" || context === "new") {
@@ -110,7 +121,7 @@ const postCode = async (req, res) => {
                             messages: [
                                 { role: "system", content: SYSTEM_PROMPT },
                                 ...last10Messages,
-                                { role: "user", content: message }
+                                { role: "user", content: enrichedMessage }
                             ],
                             temperature: 0.2,
                         });
@@ -134,7 +145,7 @@ const postCode = async (req, res) => {
                             messages: [
                                 { role: "system", content: SYSTEM_PROMPT },
                                 ...last10Messages,
-                                { role: "user", content: message }
+                                { role: "user", content: enrichedMessage }
                             ],
                         });
                         if (response.choices && response.choices.length > 0) {

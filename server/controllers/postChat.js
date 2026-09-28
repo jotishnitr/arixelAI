@@ -1,6 +1,7 @@
 const Chat = require("../models/ChatModel");
 const ai = require("../utils/geminiClient");
 const openrouter = require("../utils/openRouter");
+const { getRepoCodeContext } = require("../utils/githubRepoHelper");
 
 const SYSTEM_PROMPT = `You are ArixelCore-1o, the flagship AI model developed by ArixelAI, founded by Jotish Kumar.
 
@@ -65,11 +66,20 @@ const generateTitle = (text) => {
 
 const postChat = async (req, res) => {
   try {
-    const { text, attachment } = req.body;
+    const { text, attachment, repo } = req.body;
     let { context } = req.body;
 
     if (!text && !attachment) {
       return res.status(400).json({ message: "Text or attachment is required" });
+    }
+
+    const dbUserId = req.user?.id || req.user?._id;
+    let enrichedText = text;
+    if (repo && repo.allowReadCode && repo.fullName && dbUserId) {
+      const codeContext = await getRepoCodeContext(dbUserId, repo.fullName, repo.allowReadCode);
+      if (codeContext) {
+        enrichedText = (enrichedText ? enrichedText + "\n" : "") + codeContext;
+      }
     }
 
     let userId = req.user?.userId;
@@ -116,7 +126,7 @@ const postChat = async (req, res) => {
             role: "user",
             parts: isImage
               ? [
-                { text: text || "Please analyze this image." },
+                { text: enrichedText || "Please analyze this image." },
                 {
                   inlineData: {
                     data: attachment.base64,
@@ -124,7 +134,7 @@ const postChat = async (req, res) => {
                   },
                 },
               ]
-              : [{ text: text || "" }],
+              : [{ text: enrichedText || "" }],
           },
         ];
 
@@ -158,7 +168,7 @@ const postChat = async (req, res) => {
           role: "user",
           content: isImage
             ? [
-              { type: "text", text: text || "Please analyze this image." },
+              { type: "text", text: enrichedText || "Please analyze this image." },
               {
                 type: "image_url",
                 image_url: {
@@ -166,7 +176,7 @@ const postChat = async (req, res) => {
                 },
               },
             ]
-            : text || "",
+            : enrichedText || "",
         },
       ];
 
