@@ -34,6 +34,17 @@ export default function Chatarea({
   const [selectedFile, setSelectedFile] = useState(null);
   const [name, setName] = useState("");
 
+  // GitHub Integration state
+  const [githubConnected, setGithubConnected] = useState(false);
+  const [githubUsername, setGithubUsername] = useState("");
+  const [githubLoading, setGithubLoading] = useState(false);
+  const [githubRepos, setGithubRepos] = useState([]);
+  const [selectedRepo, setSelectedRepo] = useState(null);
+  const [showRepoPicker, setShowRepoPicker] = useState(false);
+  const [repoSearch, setRepoSearch] = useState("");
+  const [githubError, setGithubError] = useState("");
+  const [allowReadCode, setAllowReadCode] = useState(false);
+
   // for text-speech convertion (state)
   const [isListening, setIsListening] = useState(false);
 
@@ -157,6 +168,140 @@ export default function Chatarea({
     getUserName();
   }, []);
 
+  const checkGithubStatus = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/github/status`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.connected) {
+          setGithubConnected(true);
+          setGithubUsername(data.username || "");
+        } else {
+          setGithubConnected(false);
+          setGithubUsername("");
+        }
+      }
+    } catch (err) {
+      console.error("Error checking GitHub status:", err);
+    }
+  };
+
+  const fetchGithubRepos = async () => {
+    setGithubLoading(true);
+    setGithubError("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/github/repositories`, {
+        method: "GET",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (res.ok && data.repositories) {
+        setGithubRepos(data.repositories);
+        if (data.username) setGithubUsername(data.username);
+      } else {
+        setGithubError(data.error || "Failed to load repositories");
+      }
+    } catch (err) {
+      console.error("Error fetching repositories:", err);
+      setGithubError("Failed to fetch repositories");
+    } finally {
+      setGithubLoading(false);
+    }
+  };
+
+  const handleConnectGithub = async () => {
+    setGithubLoading(true);
+    setGithubError("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/github/auth-url`, {
+        method: "GET",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.authUrl) {
+        window.location.href = data.authUrl;
+      } else {
+        const clientId = data.clientId || prompt("Enter your GitHub Client ID to connect:");
+        if (clientId) {
+          window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo,read:user`;
+        } else {
+          setGithubError("GitHub App Client ID is not configured on the server.");
+        }
+      }
+    } catch (err) {
+      console.error("Error starting GitHub connect:", err);
+      setGithubError("Could not initiate GitHub connection");
+    } finally {
+      setGithubLoading(false);
+    }
+  };
+
+  const handleDisconnectGithub = async () => {
+    if (!window.confirm("Disconnect your GitHub account from ArixelAI?")) return;
+    setGithubLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/github/disconnect`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        setGithubConnected(false);
+        setGithubUsername("");
+        setGithubRepos([]);
+        setSelectedRepo(null);
+        setShowRepoPicker(false);
+      }
+    } catch (err) {
+      console.error("Error disconnecting GitHub:", err);
+    } finally {
+      setGithubLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const ghStatus = params.get("github");
+
+    if (code) {
+      fetch(`${API_BASE_URL}/api/github?code=${code}`, {
+        method: "GET",
+        credentials: "include",
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success || data.connected) {
+            setGithubConnected(true);
+            if (data.username) setGithubUsername(data.username);
+            setShowPopup(true);
+            fetchGithubRepos();
+          }
+          window.history.replaceState({}, document.title, window.location.pathname);
+        })
+        .catch((err) => {
+          console.error("Error during GitHub OAuth callback:", err);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        });
+    } else if (ghStatus === "connected") {
+      setGithubConnected(true);
+      setShowPopup(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      checkGithubStatus();
+      fetchGithubRepos();
+    } else {
+      checkGithubStatus();
+    }
+  }, []);
+
+  const filteredRepos = githubRepos.filter((repo) =>
+    repo.fullName?.toLowerCase().includes(repoSearch.toLowerCase()) ||
+    repo.name?.toLowerCase().includes(repoSearch.toLowerCase())
+  );
+
+
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -189,10 +334,21 @@ export default function Chatarea({
       }
       : null;
 
+    const attachedRepo = selectedRepo
+      ? {
+        ...selectedRepo,
+        allowReadCode: allowReadCode,
+      }
+      : null;
+    const promptToSend = attachedRepo
+      ? `${messageToSend}\n\n[Attached GitHub Repository: ${attachedRepo.fullName} (${attachedRepo.htmlUrl || `https://github.com/${attachedRepo.fullName}`})]${allowReadCode ? ' (Codebase inspection permitted by user)' : ' (Metadata only, no code inspection)'}`
+      : messageToSend;
+
     const userMessage = {
       role: "user",
       content: messageToSend,
       attachment: attachmentObj,
+      repo: attachedRepo,
     };
     const thinkingMessage = {
       role: "model",
@@ -207,6 +363,8 @@ export default function Chatarea({
     setChatInput("");
     setFilePreview(null);
     setSelectedFile(null);
+    setSelectedRepo(null);
+    setAllowReadCode(false);
     setShowPopup(false);
 
     let response;
@@ -221,9 +379,10 @@ export default function Chatarea({
             },
             credentials: "include",
             body: JSON.stringify({
-              text: messageToSend,
+              text: promptToSend,
               context: currentContext === "new" ? "" : context,
               attachment: attachmentObj,
+              repo: attachedRepo,
             }),
           },
         )
@@ -254,8 +413,9 @@ export default function Chatarea({
             },
             credentials: "include",
             body: JSON.stringify({
-              text: messageToSend,
+              text: promptToSend,
               context: currentContext === "new" ? "" : context,
+              repo: attachedRepo,
             }),
           },
         )
@@ -270,9 +430,10 @@ export default function Chatarea({
             },
             credentials: "include",
             body: JSON.stringify({
-              text: messageToSend,
+              text: promptToSend,
               context: currentContext === "new" ? "" : context,
               attachment: attachmentObj,
+              repo: attachedRepo,
             }),
           },
         )
@@ -287,8 +448,9 @@ export default function Chatarea({
             },
             credentials: "include",
             body: JSON.stringify({
-              text: messageToSend,
+              text: promptToSend,
               context: currentContext === "new" ? "" : context,
+              repo: attachedRepo,
             }),
           },
         )
@@ -635,9 +797,213 @@ export default function Chatarea({
                   </button>
                 </div>
               )}
+
+              {/* Connect GitHub Section */}
+              <div className="popup-section-divider">
+                <span>OR</span>
+              </div>
+
+              <div className="github-connect-section">
+                <div className="github-section-header">
+                  <div className="github-title-group">
+                    <svg
+                      className="github-svg-icon"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                    </svg>
+                    <span className="github-section-title">Connect GitHub</span>
+                  </div>
+
+                  {githubConnected && (
+                    <span className="github-badge">
+                      <span className="online-dot"></span>
+                      @{githubUsername || "Connected"}
+                    </span>
+                  )}
+                </div>
+
+                {!githubConnected ? (
+                  <div className="github-connect-cta">
+                    <p className="github-connect-desc">
+                      Connect your GitHub account to import and analyze repositories with AI.
+                    </p>
+                    <button
+                      type="button"
+                      className="connect-github-btn"
+                      onClick={handleConnectGithub}
+                      disabled={githubLoading}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                      </svg>
+                      {githubLoading ? "Connecting..." : "Connect GitHub Account"}
+                    </button>
+                    {githubError && <span className="github-error-msg">{githubError}</span>}
+                  </div>
+                ) : (
+                  <div className="github-connected-content">
+                    <div className="github-actions-row">
+                      <button
+                        type="button"
+                        className="browse-repos-btn"
+                        onClick={() => {
+                          const nextState = !showRepoPicker;
+                          setShowRepoPicker(nextState);
+                          if (nextState && !githubRepos.length) {
+                            fetchGithubRepos();
+                          }
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                        </svg>
+                        {showRepoPicker ? "Hide Repositories" : "Browse Repositories"}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="disconnect-github-btn"
+                        onClick={handleDisconnectGithub}
+                        title="Disconnect GitHub account"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+
+                    {showRepoPicker && (
+                      <div className="repo-picker-container">
+                        <input
+                          type="text"
+                          className="repo-filter-input"
+                          placeholder="Search repositories..."
+                          value={repoSearch}
+                          onChange={(e) => setRepoSearch(e.target.value)}
+                        />
+                        <div className="repo-items-list">
+                          {githubLoading ? (
+                            <div className="repo-loading-state">Loading repositories...</div>
+                          ) : filteredRepos.length > 0 ? (
+                            filteredRepos.map((repo) => (
+                              <button
+                                key={repo.id}
+                                type="button"
+                                className={`repo-select-item ${selectedRepo?.id === repo.id ? "active-repo" : ""}`}
+                                onClick={() => {
+                                  setSelectedRepo(repo);
+                                  setShowRepoPicker(false);
+                                }}
+                              >
+                                <span className="repo-item-icon">
+                                  {repo.private ? "🔒" : "📁"}
+                                </span>
+                                <div className="repo-item-info">
+                                  <span className="repo-item-name">{repo.fullName}</span>
+                                  {repo.description && (
+                                    <span className="repo-item-desc">{repo.description}</span>
+                                  )}
+                                </div>
+                                {repo.defaultBranch && (
+                                  <span className="repo-item-branch">{repo.defaultBranch}</span>
+                                )}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="repo-loading-state">
+                              {githubRepos.length === 0
+                                ? "No repositories found. Ensure your GitHub App has access granted."
+                                : "No matching repositories"}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedRepo && (
+                  <div className="selected-repo-wrapper">
+                    <div className="selected-repo-chip">
+                      <div className="repo-chip-left">
+                        <span className="repo-badge-icon">📦</span>
+                        <div className="repo-badge-details">
+                          <span className="repo-badge-name">{selectedRepo.fullName}</span>
+                          <span className="repo-badge-sub">
+                            {selectedRepo.defaultBranch ? `Branch: ${selectedRepo.defaultBranch}` : "Attached repository"}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="remove-repo-chip-btn"
+                        onClick={() => {
+                          setSelectedRepo(null);
+                          setAllowReadCode(false);
+                        }}
+                        title="Remove repository"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <label className="repo-permission-card">
+                      <input
+                        type="checkbox"
+                        checked={allowReadCode}
+                        onChange={(e) => setAllowReadCode(e.target.checked)}
+                      />
+                      <span className="permission-slider"></span>
+                      <div className="permission-text-box">
+                        <span className="permission-title">Grant AI permission to inspect codebase</span>
+                        <span className="permission-desc">
+                          {allowReadCode
+                            ? "🔓 Allowed: AI will read files and folder structure to answer code questions."
+                            : "🔒 Off: AI only knows the repository name and link."}
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
           </section>
         )}
+
+        {selectedRepo && !showPopup && (
+          <div className="active-repo-bar">
+            <div className="active-repo-meta">
+              <span className="active-repo-icon">📦</span>
+              <span className="active-repo-name">{selectedRepo.fullName}</span>
+              {selectedRepo.defaultBranch && (
+                <span className="active-repo-branch">({selectedRepo.defaultBranch})</span>
+              )}
+              <button
+                type="button"
+                className={`repo-perm-badge ${allowReadCode ? "enabled" : "disabled"}`}
+                onClick={() => setAllowReadCode(!allowReadCode)}
+                title="Click to toggle code inspection permission"
+              >
+                {allowReadCode ? "🔓 Code read allowed" : "🔒 Metadata only (click to allow code read)"}
+              </button>
+            </div>
+            <button
+              type="button"
+              className="active-repo-remove"
+              onClick={() => {
+                setSelectedRepo(null);
+                setAllowReadCode(false);
+              }}
+              aria-label="Remove repository"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         <div className="chat-input-container">
           <div className="input-row">
             <button
