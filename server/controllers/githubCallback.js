@@ -57,8 +57,19 @@ const getGithubStatus = async (req, res) => {
 const handleGithubCallback = async (req, res) => {
     const code = req.query.code;
     const installationId = req.query.installation_id;
+    const stateClientId = req.query.state;
+
+    const host = req.get("host") || "";
+    const isLocal = host.includes("localhost");
+    const redirectUrlBase = isLocal
+        ? "http://localhost:5173"
+        : CORS_ORIGIN;
+    const acceptsHtml = req.headers.accept && req.headers.accept.includes("text/html");
 
     if (!code && !installationId) {
+        if (acceptsHtml) {
+            return res.redirect(`${redirectUrlBase}?github=error&message=No_code_provided`);
+        }
         return res.status(400).json({ message: "GitHub callback code or installation_id is required." });
     }
 
@@ -66,7 +77,21 @@ const handleGithubCallback = async (req, res) => {
         let userAccessToken = null;
         let userData = {};
 
-        if (code && process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+        const clientId = stateClientId || process.env.GITHUB_CLIENT_ID;
+        const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+
+        if (code) {
+            if (!clientId || !clientSecret) {
+                console.error("GitHub OAuth Error: Missing clientId or clientSecret on server", {
+                    hasClientId: !!clientId,
+                    hasClientSecret: !!clientSecret,
+                });
+                if (acceptsHtml) {
+                    return res.redirect(`${redirectUrlBase}?github=error&message=Missing_GITHUB_CLIENT_ID_or_GITHUB_CLIENT_SECRET_on_server`);
+                }
+                return res.status(500).json({ error: "Missing GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET configuration." });
+            }
+
             const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
                 method: "POST",
                 headers: {
@@ -74,13 +99,24 @@ const handleGithubCallback = async (req, res) => {
                     "Accept": "application/json",
                 },
                 body: JSON.stringify({
-                    client_id: process.env.GITHUB_CLIENT_ID,
-                    client_secret: process.env.GITHUB_CLIENT_SECRET,
+                    client_id: clientId,
+                    client_secret: clientSecret,
                     code: code,
                 }),
             });
 
             const tokenData = await tokenResponse.json();
+            console.log("GitHub Token Exchange Result:", tokenData);
+
+            if (tokenData.error) {
+                console.error("GitHub Token Exchange Error:", tokenData.error, tokenData.error_description);
+                const errMsg = tokenData.error_description || tokenData.error;
+                if (acceptsHtml) {
+                    return res.redirect(`${redirectUrlBase}?github=error&message=${encodeURIComponent(errMsg)}`);
+                }
+                return res.status(400).json({ error: errMsg });
+            }
+
             userAccessToken = tokenData.access_token;
 
             if (userAccessToken) {
@@ -99,6 +135,14 @@ const handleGithubCallback = async (req, res) => {
             }
         }
 
+        if (!userAccessToken && !installationId) {
+            console.error("Failed to obtain userAccessToken or installationId");
+            if (acceptsHtml) {
+                return res.redirect(`${redirectUrlBase}?github=error&message=Failed_to_obtain_access_token`);
+            }
+            return res.status(400).json({ error: "Failed to obtain access token from GitHub." });
+        }
+
         // Save to current user
         const userId = req.user?.id || req.user?._id;
         if (userId) {
@@ -107,17 +151,14 @@ const handleGithubCallback = async (req, res) => {
             if (userData.login) updateFields.githubUsername = userData.login;
             if (installationId) updateFields.githubInstallationId = installationId;
 
-            await User.findByIdAndUpdate(userId, updateFields, { new: true });
+            await User.findByIdAndUpdate(userId, updateFields, { returnDocument: "after" });
+            console.log(`Saved GitHub credentials for user ${userId} (@${userData.login || "unknown"})`);
+        } else {
+            console.warn("No logged-in user found on req.user during GitHub callback");
         }
 
-        const acceptsHtml = req.headers.accept && req.headers.accept.includes("text/html");
         if (acceptsHtml) {
-            const host = req.get("host") || "";
-            const isLocal = host.includes("localhost");
-            const redirectUrl = isLocal
-                ? "http://localhost:5173?github=connected"
-                : `${CORS_ORIGIN}?github=connected`;
-            return res.redirect(redirectUrl);
+            return res.redirect(`${redirectUrlBase}?github=connected`);
         }
 
         return res.status(200).json({
@@ -128,6 +169,9 @@ const handleGithubCallback = async (req, res) => {
         });
     } catch (error) {
         console.error("Error during GitHub callback:", error);
+        if (acceptsHtml) {
+            return res.redirect(`${redirectUrlBase}?github=error&message=${encodeURIComponent(error.message)}`);
+        }
         return res.status(500).json({ error: "Failed to handle GitHub callback" });
     }
 };

@@ -44,6 +44,9 @@ export default function Chatarea({
   const [repoSearch, setRepoSearch] = useState("");
   const [githubError, setGithubError] = useState("");
   const [allowReadCode, setAllowReadCode] = useState(false);
+  const [showClientGuide, setShowClientGuide] = useState(false);
+  const [customClientId, setCustomClientId] = useState("");
+  const [copiedUrl, setCopiedUrl] = useState("");
 
   // for text-speech convertion (state)
   const [isListening, setIsListening] = useState(false);
@@ -212,9 +215,22 @@ export default function Chatarea({
     }
   };
 
+  const handleCopyUrl = (text, type) => {
+    navigator.clipboard.writeText(text);
+    setCopiedUrl(type);
+    setTimeout(() => setCopiedUrl(""), 2500);
+  };
+
   const handleConnectGithub = async () => {
     setGithubLoading(true);
     setGithubError("");
+
+    const manualId = customClientId.trim();
+    if (manualId) {
+      window.location.href = `https://github.com/login/oauth/authorize?client_id=${manualId}&scope=repo,read:user&state=${encodeURIComponent(manualId)}`;
+      return;
+    }
+
     try {
       const res = await fetch(`${API_BASE_URL}/api/github/auth-url`, {
         method: "GET",
@@ -223,13 +239,11 @@ export default function Chatarea({
       const data = await res.json();
       if (data.authUrl) {
         window.location.href = data.authUrl;
+      } else if (data.clientId) {
+        window.location.href = `https://github.com/login/oauth/authorize?client_id=${data.clientId}&scope=repo,read:user&state=${encodeURIComponent(data.clientId)}`;
       } else {
-        const clientId = data.clientId || prompt("Enter your GitHub Client ID to connect:");
-        if (clientId) {
-          window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo,read:user`;
-        } else {
-          setGithubError("GitHub App Client ID is not configured on the server.");
-        }
+        setGithubError("No Client ID found. Please follow the guide below to enter your GitHub Client ID.");
+        setShowClientGuide(true);
       }
     } catch (err) {
       console.error("Error starting GitHub connect:", err);
@@ -278,11 +292,16 @@ export default function Chatarea({
             if (data.username) setGithubUsername(data.username);
             setShowPopup(true);
             fetchGithubRepos();
+          } else {
+            setGithubError(data.error || "Failed to obtain GitHub access token");
+            setShowPopup(true);
           }
           window.history.replaceState({}, document.title, window.location.pathname);
         })
         .catch((err) => {
           console.error("Error during GitHub OAuth callback:", err);
+          setGithubError("GitHub connection failed");
+          setShowPopup(true);
           window.history.replaceState({}, document.title, window.location.pathname);
         });
     } else if (ghStatus === "connected") {
@@ -291,6 +310,11 @@ export default function Chatarea({
       window.history.replaceState({}, document.title, window.location.pathname);
       checkGithubStatus();
       fetchGithubRepos();
+    } else if (ghStatus === "error") {
+      const errMsg = params.get("message") || "Failed to link GitHub account";
+      setGithubError(decodeURIComponent(errMsg));
+      setShowPopup(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
     } else {
       checkGithubStatus();
     }
@@ -831,17 +855,100 @@ export default function Chatarea({
                     <p className="github-connect-desc">
                       Connect your GitHub account to import and analyze repositories with AI.
                     </p>
+
+                    <div className="client-id-input-row">
+                      <input
+                        type="text"
+                        className="client-id-input"
+                        placeholder="Paste GitHub Client ID (e.g. Iv23...)"
+                        value={customClientId}
+                        onChange={(e) => setCustomClientId(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="connect-github-btn"
+                        onClick={handleConnectGithub}
+                        disabled={githubLoading}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                        </svg>
+                        {githubLoading ? "Connecting..." : "Connect"}
+                      </button>
+                    </div>
+
                     <button
                       type="button"
-                      className="connect-github-btn"
-                      onClick={handleConnectGithub}
-                      disabled={githubLoading}
+                      className="guide-accordion-toggle"
+                      onClick={() => setShowClientGuide(!showClientGuide)}
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-                      </svg>
-                      {githubLoading ? "Connecting..." : "Connect GitHub Account"}
+                      <span className="guide-toggle-text">
+                        ℹ️ How to get your GitHub Client ID? (Step-by-step)
+                      </span>
+                      <span className="guide-chevron">{showClientGuide ? "▲" : "▼"}</span>
                     </button>
+
+                    {showClientGuide && (
+                      <div className="client-id-guide-box">
+                        <div className="guide-step">
+                          <span className="step-num">1</span>
+                          <div className="step-content">
+                            <span>Open GitHub Developer Settings:</span>
+                            <a
+                              href="https://github.com/settings/developers"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="guide-link"
+                            >
+                              github.com/settings/developers ↗
+                            </a>
+                            <span>Select <strong>OAuth Apps</strong> &rarr; Click <strong>New OAuth App</strong> (or <strong>GitHub Apps</strong>).</span>
+                          </div>
+                        </div>
+
+                        <div className="guide-step">
+                          <span className="step-num">2</span>
+                          <div className="step-content">
+                            <span>Set the URLs in your GitHub App:</span>
+                            <div className="url-copy-item">
+                              <span className="url-label">Homepage URL:</span>
+                              <div className="url-code-row">
+                                <code>https://jotishnitr.github.io/arixelAI</code>
+                                <button
+                                  type="button"
+                                  className="copy-chip-btn"
+                                  onClick={() => handleCopyUrl("https://jotishnitr.github.io/arixelAI", "homepage")}
+                                >
+                                  {copiedUrl === "homepage" ? "✓ Copied" : "Copy"}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="url-copy-item">
+                              <span className="url-label">Authorization callback URL:</span>
+                              <div className="url-code-row">
+                                <code>https://arixelai.onrender.com/api/github</code>
+                                <button
+                                  type="button"
+                                  className="copy-chip-btn"
+                                  onClick={() => handleCopyUrl("https://arixelai.onrender.com/api/github", "callback")}
+                                >
+                                  {copiedUrl === "callback" ? "✓ Copied" : "Copy"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="guide-step">
+                          <span className="step-num">3</span>
+                          <div className="step-content">
+                            <span>Click <strong>Register application</strong>, copy the generated <strong>Client ID</strong> (e.g. <code>Iv23...</code>), paste it into the box above and click <strong>Connect</strong>!</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {githubError && <span className="github-error-msg">{githubError}</span>}
                   </div>
                 ) : (
