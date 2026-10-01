@@ -77,20 +77,22 @@ const handleGithubCallback = async (req, res) => {
         let userAccessToken = null;
         let userData = {};
 
-        const clientId = stateClientId || process.env.GITHUB_CLIENT_ID;
-        const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+        const cleanClientId = (process.env.GITHUB_CLIENT_ID || stateClientId || "").trim().replace(/^["']|["']$/g, '');
+        const cleanClientSecret = (process.env.GITHUB_CLIENT_SECRET || "").trim().replace(/^["']|["']$/g, '');
 
         if (code) {
-            if (!clientId || !clientSecret) {
+            if (!cleanClientId || !cleanClientSecret) {
                 console.error("GitHub OAuth Error: Missing clientId or clientSecret on server", {
-                    hasClientId: !!clientId,
-                    hasClientSecret: !!clientSecret,
+                    hasClientId: !!cleanClientId,
+                    hasClientSecret: !!cleanClientSecret,
                 });
                 if (acceptsHtml) {
                     return res.redirect(`${redirectUrlBase}?github=error&message=Missing_GITHUB_CLIENT_ID_or_GITHUB_CLIENT_SECRET_on_server`);
                 }
                 return res.status(500).json({ error: "Missing GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET configuration." });
             }
+
+            console.log(`Attempting token exchange for Client ID: ${cleanClientId.slice(0, 6)}... (Secret length: ${cleanClientSecret.length})`);
 
             const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
                 method: "POST",
@@ -99,8 +101,8 @@ const handleGithubCallback = async (req, res) => {
                     "Accept": "application/json",
                 },
                 body: JSON.stringify({
-                    client_id: clientId,
-                    client_secret: clientSecret,
+                    client_id: cleanClientId,
+                    client_secret: cleanClientSecret,
                     code: code,
                 }),
             });
