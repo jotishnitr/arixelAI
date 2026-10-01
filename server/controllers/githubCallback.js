@@ -10,9 +10,11 @@ const getGithubAuthUrl = async (req, res) => {
         const appSlug = process.env.GITHUB_APP_SLUG;
         const appId = process.env.GITHUB_APP_ID;
 
+        const userId = req.user?.id || req.user?._id;
+
         let authUrl = "";
         if (clientId) {
-            authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo,read:user`;
+            authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo,read:user${userId ? `&state=${userId}` : ""}`;
         } else if (appSlug) {
             authUrl = `https://github.com/apps/${appSlug}/installations/new`;
         }
@@ -77,7 +79,7 @@ const handleGithubCallback = async (req, res) => {
         let userAccessToken = null;
         let userData = {};
 
-        const cleanClientId = (process.env.GITHUB_CLIENT_ID || stateClientId || "").trim().replace(/^["']|["']$/g, '');
+        const cleanClientId = (process.env.GITHUB_CLIENT_ID || "").trim().replace(/^["']|["']$/g, '');
         const cleanClientSecret = (process.env.GITHUB_CLIENT_SECRET || "").trim().replace(/^["']|["']$/g, '');
 
         if (code) {
@@ -145,8 +147,9 @@ const handleGithubCallback = async (req, res) => {
             return res.status(400).json({ error: "Failed to obtain access token from GitHub." });
         }
 
-        // Save to current user
-        const userId = req.user?.id || req.user?._id;
+        // Save to current user (either from session/cookie or preserved state param)
+        const stateUserId = req.query.state && /^[a-fA-F0-9]{24}$/.test(req.query.state) ? req.query.state : null;
+        const userId = req.user?.id || req.user?._id || stateUserId;
         if (userId) {
             const updateFields = {};
             if (userAccessToken) updateFields.githubAccessToken = userAccessToken;
@@ -156,7 +159,7 @@ const handleGithubCallback = async (req, res) => {
             await User.findByIdAndUpdate(userId, updateFields, { returnDocument: "after" });
             console.log(`Saved GitHub credentials for user ${userId} (@${userData.login || "unknown"})`);
         } else {
-            console.warn("No logged-in user found on req.user during GitHub callback");
+            console.warn("No logged-in user found on req.user or state during GitHub callback");
         }
 
         if (acceptsHtml) {

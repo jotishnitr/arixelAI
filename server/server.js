@@ -77,5 +77,6 @@ app.use('/api', postImageModel);
 app.use('/api', postCode);
 app.use('/api', postDocAnalysis);
 app.use('/api/github', githubRoutes);
+app.use('/auth/github', githubRoutes);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
