@@ -25,9 +25,6 @@ const UserSchema = mongoose.Schema({
     dailyOpenRouterTokenCapacity: { type: Number, default: 0 },
     dailyOpenRouterTokenUsed: { type: Number, default: 0 },
 
-    dailyCerebrasTokenCapacity: { type: Number, default: 0 },
-    dailyCerebrasTokenUsed: { type: Number, default: 0 },
-
     dailyGroqTokenCapacity: { type: Number, default: 0 },
     dailyGroqTokenUsed: { type: Number, default: 0 },
 
@@ -43,15 +40,7 @@ const UserSchema = mongoose.Schema({
         rpd: { type: Number, default: 0 }
     }],
 
-    cerebrasModels: [{
-        model: { type: String },
-        dailyTokenCapacity: { type: Number, default: 0 },
-        dailyTokensUsed: { type: Number, default: 0 },
-        totalTokensUsed: { type: Number, default: 0 },
-        rpm: { type: Number, default: 0 },
-        tpm: { type: Number, default: 0 },
-        rpd: { type: Number, default: 0 }
-    }],
+
 
     openRouterModels: [{
         model: { type: String },

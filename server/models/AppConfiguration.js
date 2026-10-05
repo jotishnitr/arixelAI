@@ -12,9 +12,6 @@ const appConfigurationSchema = mongoose.Schema({
     totalOpenRouterTokensDailyLimit: { type: Number, required: true, default: 50000 },
     totalOpenRouterTokensDailyUsed: { type: Number, required: true, default: 0 },
 
-    totalCerebrasTokensDailyLimit: { type: Number, required: true, default: 50000 },
-    totalCerebrasTokensDailyUsed: { type: Number, required: true, default: 0 },
-
     totalGroqTokensDailyLimit: { type: Number, required: true, default: 50000 },
     totalGroqTokensDailyUsed: { type: Number, required: true, default: 0 },
 
@@ -29,13 +26,7 @@ const appConfigurationSchema = mongoose.Schema({
         rpd: { type: Number, default: 0 }
     }],
 
-    cerebrasModels: [{
-        model: { type: String },
-        contextLength: { type: Number },
-        rpm: { type: Number, default: 0 },
-        tpm: { type: Number, default: 0 },
-        rpd: { type: Number, default: 0 }
-    }],
+
 
     openRouterModels: [{
         model: { type: String },
@@ -58,7 +49,6 @@ const appConfigurationSchema = mongoose.Schema({
     // Last reset sync timestamps (for checking first request after reset)
     lastGeminiReset: { type: Date, default: null },
     lastOpenRouterReset: { type: Date, default: null },
-    lastCerebrasReset: { type: Date, default: null },
     lastGroqReset: { type: Date, default: null },
 
     // Additional provider account metadata

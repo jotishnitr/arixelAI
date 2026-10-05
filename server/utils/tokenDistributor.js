@@ -42,14 +42,18 @@ async function tokenDistributor(num = 100) {
       rpd: m.rpd || 0,
     }));
 
-    // Update all users (explicitly clear cerebrasModels)
+    // Update all users and permanently unset any legacy Cerebras fields
     await User.updateMany({}, {
       $set: {
         geminiModels,
-        cerebrasModels: [],
         openRouterModels,
         groqModels,
         dailyTotalTokensUsed: 0,
+      },
+      $unset: {
+        cerebrasModels: "",
+        dailyCerebrasTokenCapacity: "",
+        dailyCerebrasTokenUsed: "",
       },
     });
 
