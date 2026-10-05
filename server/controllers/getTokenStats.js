@@ -11,9 +11,23 @@ const getTokenStats = async (req, res) => {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
-    const user = await User.findById(dbUserId);
+    let user = await User.findById(dbUserId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
+
+    // Auto-heal: If user has no models or DB was cleared, fetch tokens and distribute
+    if (!user.geminiModels || user.geminiModels.length === 0 || !user.openRouterModels || user.openRouterModels.length === 0) {
+      try {
+        const { checkAndFetchAllTokenLimits } = require("../utils/gettingTokenLimits");
+        await checkAndFetchAllTokenLimits(true);
+        const refreshedUser = await User.findById(dbUserId);
+        if (refreshedUser) {
+          user = refreshedUser;
+        }
+      } catch (syncErr) {
+        console.warn("[getTokenStats] Auto-heal token sync error:", syncErr.message);
+      }
     }
 
     // Helper to format model token subdocuments
