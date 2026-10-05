@@ -135,30 +135,18 @@ Do not execute the user's task.
 Only perform model selection.`;
 
 const MODEL_SELECTION_MODELS = [
-  "gemini-3.1-pro-preview",
-  "gemini-3.5-flash",
-  "gemini-3.8-flash",
-  "gemini-2.5-pro",
-  "gemini-2.5-flash",
-  "gemini-omni-1.1-flash",
-  "qwen-3.8-27b",
-  "gpt-oss-120b",
-  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "inclusionai/ling-3.0-flash-sante:free",
   "nvidia/nemotron-3-super-120b-a12b:free",
+  "qwen/qwen3.8-27b:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
 ];
 
-// Execution mapping to ensure each model resolves to its provider and active API identifier
+// Execution mapping for the verified free OpenRouter selection models
 const MODEL_EXECUTION_MAP = {
-  "gemini-3.1-pro-preview": { provider: "gemini", actualModel: "gemini-3.8-flash" },
-  "gemini-3.5-flash": { provider: "gemini", actualModel: "gemini-3.5-flash-lite" },
-  "gemini-3.8-flash": { provider: "gemini", actualModel: "gemini-3.8-flash" },
-  "gemini-2.5-pro": { provider: "gemini", actualModel: "gemini-flash-latest" },
-  "gemini-2.5-flash": { provider: "gemini", actualModel: "gemini-flash-latest" },
-  "gemini-omni-1.1-flash": { provider: "gemini", actualModel: "gemini-3.8-flash" },
-  "qwen-3.8-27b": { provider: "groq", actualModel: "qwen/qwen3.8-27b" },
-  "gpt-oss-120b": { provider: "groq", actualModel: "openai/gpt-oss-120b" },
-  "nvidia/nemotron-3-ultra-550b-a55b:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+  "inclusionai/ling-3.0-flash-sante:free": { provider: "openrouter", actualModel: "inclusionai/ling-3.0-flash-sante:free" },
   "nvidia/nemotron-3-super-120b-a12b:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3-super-120b-a12b:free" },
+  "qwen/qwen3.8-27b:free": { provider: "openrouter", actualModel: "qwen/qwen3.8-27b:free" },
+  "nvidia/nemotron-3-ultra-550b-a55b:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3-ultra-550b-a55b:free" },
 };
 
 // Helper to generate a short conversation title from prompt
@@ -315,7 +303,22 @@ const postChat = async (req, res, next) => {
     // Realistic token buffer needed for the selection model request (~300 tokens)
     const selectionCheckTokens = Math.min(350, tokenCounter.estimateTokens(enrichedText || text) + 150);
 
-    // Prepare inputs payload for the selection engine
+    // Prepare clean, compact inputs payload for the selection engine (<1,200 tokens)
+    const compactAvailableModels = {};
+    for (const [cat, list] of Object.entries(TASK_COMPLETION_MODELS)) {
+      compactAvailableModels[cat] = (list || []).map((m) => ({
+        model: m.model,
+        provider: m.provider,
+        bestFunction: m.bestFunction,
+      }));
+    }
+
+    const compactTokenStatus = userCurrentTokens.map((m) => ({
+      model: m.model,
+      provider: m.provider,
+      remainingTokens: m.providerRemainingTokens || 0,
+    }));
+
     const selectionInputPayload = `
 USER_PROMPT:
 ${enrichedText || text}
@@ -324,10 +327,10 @@ REQUIRED_TOKENS:
 ${taskRequiredTokens}
 
 AVAILABLE_MODELS:
-${JSON.stringify(TASK_COMPLETION_MODELS, null, 2)}
+${JSON.stringify(compactAvailableModels, null, 2)}
 
 TOKEN_STATUS:
-${JSON.stringify(userCurrentTokens, null, 2)}
+${JSON.stringify(compactTokenStatus, null, 2)}
 `;
 
     // ========================================================
