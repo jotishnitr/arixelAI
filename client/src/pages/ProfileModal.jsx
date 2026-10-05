@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import profileIcon from "../assets/profile.png";
 import "./Profile.css";
 
 import { API_BASE_URL } from "../config";
 
 export default function Profile({ setCurrentState }) {
+    const navigate = useNavigate();
     const [profileState, setProfileState] = useState("display");
 
     const [name, setName] = useState("");
@@ -94,7 +96,8 @@ export default function Profile({ setCurrentState }) {
                 credentials: "include",
             });
             if (response.ok) {
-                window.location.href = "/arixelAI/login";
+                if (setCurrentState) setCurrentState("hero");
+                navigate("/login");
             } else {
                 console.error("Failed to sign out");
             }
