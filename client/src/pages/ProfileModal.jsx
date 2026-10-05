@@ -64,6 +64,16 @@ export default function Profile({ setCurrentState }) {
         fetchTokenStats();
     }, []);
 
+    useEffect(() => {
+        function handleKeyDown(e) {
+            if (e.key === "Escape" && setCurrentState) {
+                setCurrentState("hero");
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [setCurrentState]);
+
     async function handleSubmit(e) {
         if (e) e.preventDefault();
         try {
@@ -116,7 +126,10 @@ export default function Profile({ setCurrentState }) {
 
     if (profileState === "edit") {
         return (
-            <section className="profile-content-area">
+            <section
+                className="profile-content-area"
+                onClick={(e) => { if (e.target === e.currentTarget && setCurrentState) setCurrentState("hero"); }}
+            >
                 <div className="profile-card">
                     <div className="profile-header">
                         <h2 className="profile-title">Edit Profile</h2>
@@ -196,7 +209,10 @@ export default function Profile({ setCurrentState }) {
         );
     } else {
         return (
-            <section className="profile-content-area">
+            <section
+                className="profile-content-area"
+                onClick={(e) => { if (e.target === e.currentTarget && setCurrentState) setCurrentState("hero"); }}
+            >
                 <div className="profile-card">
                     <div className="profile-header">
                         <h2 className="profile-title">User Profile</h2>
