@@ -155,8 +155,8 @@ const MODEL_EXECUTION_MAP = {
   "gemini-2.5-pro": { provider: "gemini", actualModel: "gemini-pro-latest" },
   "gemini-2.5-flash": { provider: "gemini", actualModel: "gemini-2.5-flash-lite" },
   "gemini-omni-1.1-flash": { provider: "gemini", actualModel: "gemini-omni-flash-preview" },
-  "qwen-3.8-27b": { provider: "groq", actualModel: "qwen/qwen3.8-27b" },
-  "gpt-oss-120b": { provider: "groq", actualModel: "openai/gpt-oss-120b" },
+  "qwen-3.8-27b": { provider: "cerebras", actualModel: "qwen-3.8-27b" },
+  "gpt-oss-120b": { provider: "cerebras", actualModel: "gpt-oss-120b" },
   "nvidia/nemotron-3-ultra-550b-a55b:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3-ultra:free" },
   "nvidia/nemotron-3-super-120b-a12b:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3-super:free" },
 };
