@@ -149,16 +149,16 @@ const MODEL_SELECTION_MODELS = [
 
 // Execution mapping to ensure each model resolves to its provider and active API identifier
 const MODEL_EXECUTION_MAP = {
-  "gemini-3.1-pro-preview": { provider: "gemini", actualModel: "gemini-3.1-pro-preview-customtools" },
+  "gemini-3.1-pro-preview": { provider: "gemini", actualModel: "gemini-3.8-flash" },
   "gemini-3.5-flash": { provider: "gemini", actualModel: "gemini-3.5-flash-lite" },
-  "gemini-3.8-flash": { provider: "gemini", actualModel: "gemini-3.6-flash" },
-  "gemini-2.5-pro": { provider: "gemini", actualModel: "gemini-pro-latest" },
-  "gemini-2.5-flash": { provider: "gemini", actualModel: "gemini-2.5-flash-lite" },
-  "gemini-omni-1.1-flash": { provider: "gemini", actualModel: "gemini-omni-flash-preview" },
-  "qwen-3.8-27b": { provider: "cerebras", actualModel: "qwen-3.8-27b" },
-  "gpt-oss-120b": { provider: "cerebras", actualModel: "gpt-oss-120b" },
-  "nvidia/nemotron-3-ultra-550b-a55b:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3-ultra:free" },
-  "nvidia/nemotron-3-super-120b-a12b:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3-super:free" },
+  "gemini-3.8-flash": { provider: "gemini", actualModel: "gemini-3.8-flash" },
+  "gemini-2.5-pro": { provider: "gemini", actualModel: "gemini-flash-latest" },
+  "gemini-2.5-flash": { provider: "gemini", actualModel: "gemini-flash-latest" },
+  "gemini-omni-1.1-flash": { provider: "gemini", actualModel: "gemini-3.8-flash" },
+  "qwen-3.8-27b": { provider: "groq", actualModel: "qwen/qwen3.8-27b" },
+  "gpt-oss-120b": { provider: "groq", actualModel: "openai/gpt-oss-120b" },
+  "nvidia/nemotron-3-ultra-550b-a55b:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+  "nvidia/nemotron-3-super-120b-a12b:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3-super-120b-a12b:free" },
 };
 
 // Helper to generate a short conversation title from prompt
@@ -456,10 +456,12 @@ ${JSON.stringify(userCurrentTokens, null, 2)}
     if (!selectedModels || !Array.isArray(selectedModels) || selectedModels.length === 0) {
       console.log("[modelSelector] Falling back to default candidates from available models.");
       selectedModels = [
-        { model: "gemini-3.6-flash", provider: "gemini" },
-        { model: "llama-3.3-70b-versatile", provider: "groq" },
-        { model: "llama3.3-70b", provider: "cerebras" },
-        { model: "meta-llama/llama-3.3-70b-instruct:free", provider: "openrouter" },
+        { model: "openai/gpt-oss-120b", provider: "groq" },
+        { model: "gemini-3.8-flash", provider: "gemini" },
+        { model: "qwen/qwen3.8-27b", provider: "groq" },
+        { model: "gemini-3.5-flash-lite", provider: "gemini" },
+        { model: "gemini-flash-latest", provider: "gemini" },
+        { model: "nvidia/nemotron-3-ultra-550b-a55b:free", provider: "openrouter" },
       ];
     }
 

@@ -118,6 +118,37 @@ function buildGeminiContents(historyMessages, currentPrompt, attachment) {
 }
 
 /**
+ * Resolves the provider-specific model endpoint identifier.
+ */
+function resolveModelForProvider(modelId, provider) {
+  const m = String(modelId || "").trim();
+  const p = String(provider || "").toLowerCase();
+
+  if (p === "groq") {
+    if (m === "gpt-oss-120b" || m.endsWith("/gpt-oss-120b")) return "openai/gpt-oss-120b";
+    if (m === "gpt-oss-20b" || m.endsWith("/gpt-oss-20b")) return "openai/gpt-oss-20b";
+    if (m === "qwen-3.8-27b" || m.endsWith("/qwen3.8-27b") || m.includes("qwen")) return "qwen/qwen3.8-27b";
+    return m;
+  }
+
+  if (p === "gemini") {
+    if (m === "gemini-3.5-flash") return "gemini-3.5-flash-lite";
+    if (m === "gemini-3.6-flash") return "gemini-3.8-flash"; // Reliable fallback when 3.6 encounters 503 high demand
+    if (m === "gemini-2.5-flash" || m === "gemini-2.5-flash-lite") return "gemini-flash-latest";
+    if (m === "gemini-2.5-pro") return "gemini-pro-latest";
+    return m;
+  }
+
+  if (p === "openrouter") {
+    if (m.includes("nemotron-3-ultra")) return "nvidia/nemotron-3-ultra-550b-a55b:free";
+    if (m.includes("nemotron-3-super")) return "nvidia/nemotron-3-super-120b-a12b:free";
+    return m;
+  }
+
+  return m;
+}
+
+/**
  * Main controller to execute model completion from candidate selectedModels.
  */
 const handleChatResponse = async (req, res) => {
@@ -189,10 +220,11 @@ const handleChatResponse = async (req, res) => {
 
     // 4. Iterate over selected models in priority order, protected by modelQueue (RPM & TPM)
     for (const item of selectedModels) {
-      const modelId = typeof item === "string" ? item : item.model;
+      const rawModelId = typeof item === "string" ? item : item.model;
       const provider = ((typeof item === "object" ? item.provider : "") || "gemini").toLowerCase();
 
-      if (!modelId) continue;
+      if (!rawModelId) continue;
+      const modelId = resolveModelForProvider(rawModelId, provider);
 
       try {
         console.log(`[chatResponse] Calling ${provider} [${modelId}] via modelQueue...`);
