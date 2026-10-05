@@ -134,7 +134,17 @@ If no eligible model exists, return:
 Do not execute the user's task.
 Only perform model selection.`;
 
+// Model selection list: 6 free, high-capacity Gemini models + 4 verified free OpenRouter models
 const MODEL_SELECTION_MODELS = [
+  // 6 Gemini models (Free tier, 1,000,000 TPM limit)
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-flash-lite-latest",
+  "gemini-3.1-flash-lite-preview",
+  "gemini-3.5-flash",
+
+  // 4 OpenRouter models (Verified free tier, 262k - 1,000k context)
   "inclusionai/ling-3.0-flash-sante:free",
   "nvidia/nemotron-3-super-120b-a12b:free",
   "qwen/qwen3.8-27b:free",
@@ -169,7 +179,7 @@ function parseSelectionOutput(rawText) {
     if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     if (parsed && Array.isArray(parsed.models) && parsed.models.length > 0) return parsed.models;
     if (parsed && Array.isArray(parsed.selectedModels) && parsed.selectedModels.length > 0) return parsed.selectedModels;
-  } catch (err) {}
+  } catch (err) { }
   return null;
 }
 

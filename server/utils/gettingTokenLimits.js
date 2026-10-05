@@ -149,19 +149,29 @@ async function fetchGeminiTokens() {
     }
 
     const data = await response.json();
-    const models = (data.models || []).map((m) => {
-        const modelName = m.name ? m.name.replace(/^models\//, "") : "";
-        const limits = getGeminiRateLimits(modelName);
-        return {
-            model: modelName,
-            displayName: m.displayName || m.name || "",
-            inputTokenLimit: m.inputTokenLimit || 0,
-            outputTokenLimit: m.outputTokenLimit || 0,
-            rpm: limits.rpm,
-            tpm: limits.tpm,
-            rpd: limits.rpd,
-        };
-    });
+    const excludedGemini = new Set([
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash-lite",
+        "gemini-pro-latest",
+        "gemini-3.1-pro-preview",
+        "gemini-3.1-pro-preview-customtools",
+    ]);
+    const models = (data.models || [])
+        .map((m) => {
+            const modelName = m.name ? m.name.replace(/^models\//, "") : "";
+            const limits = getGeminiRateLimits(modelName);
+            return {
+                model: modelName,
+                displayName: m.displayName || m.name || "",
+                inputTokenLimit: m.inputTokenLimit || 0,
+                outputTokenLimit: m.outputTokenLimit || 0,
+                rpm: limits.rpm,
+                tpm: limits.tpm,
+                rpd: limits.rpd,
+            };
+        })
+        .filter((m) => m.model && !excludedGemini.has(m.model));
 
     const dailyLimit = 1000000;
     return { models, dailyLimit };
@@ -249,7 +259,15 @@ async function fetchOpenRouterTokens() {
         if (modelsRes.ok) {
             const modelsData = await modelsRes.json();
             models = (modelsData.data || [])
-                .filter((m) => m.id && (m.id.endsWith(":free") || m.pricing?.prompt === "0"))
+                .filter((m) => {
+                    if (!m.id || !m.id.endsWith(":free")) return false;
+                    const promptPrice = Number(m.pricing?.prompt || 0);
+                    const completionPrice = Number(m.pricing?.completion || 0);
+                    if (promptPrice !== 0 || completionPrice !== 0) return false;
+                    // Exclude restricted models that require agentic harnesses or return provider errors
+                    if (m.id.includes("thinkingmachines/") || m.id.startsWith("google/gemma")) return false;
+                    return true;
+                })
                 .map((m) => {
                     const limits = getOpenRouterRateLimits(m.id, keyInfo);
                     return {
