@@ -22,10 +22,8 @@ const resetPassword = require('./routes/resetPassword.js')
 const editContext = require('./routes/editContext.js')
 const deleteChat = require('./routes/deleteChat.js')
 const serverWakeup = require('./routes/serverWakeup.js')
-const postImageModel = require('./routes/postImageModel.js')
-const postCode = require('./routes/postCode.js')
-const postDocAnalysis = require('./routes/postDocAnalysis.js')
 const githubRoutes = require('./routes/githubCallback.js')
+const getTokenStats = require('./routes/getTokenStats.js')
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
@@ -38,10 +36,13 @@ app.use(
   }),
 );
 
+const { initTokenLimitsCron } = require("./utils/gettingTokenLimits.js");
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cookieParser());
 connectDB();
+initTokenLimitsCron();
 
 // Session & Passport Middlewares
 app.use(
@@ -73,9 +74,7 @@ app.use('/auth', resetPassword);
 app.use('/api', editContext);
 app.use('/api', deleteChat);
 app.use('/api', serverWakeup);
-app.use('/api', postImageModel);
-app.use('/api', postCode);
-app.use('/api', postDocAnalysis);
+app.use('/api', getTokenStats);
 app.use('/api/github', githubRoutes);
 app.use('/auth/github', githubRoutes);
 const PORT = process.env.PORT || 5000;

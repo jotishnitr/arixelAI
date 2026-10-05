@@ -25,10 +25,12 @@
     "jsonwebtoken": "^9.0.3",
     "mammoth": "^1.12.1",
     "mongoose": "^9.9.1",
+    "node-cron": "^4.6.0",
     "nodemailer": "^9.0.5",
     "nodemon": "^3.1.14",
     "octokit": "^5.0.5",
     "openai": "^7.5.0",
+    "p-queue": "^6.6.2",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "pdf-parse": "^2.4.5"

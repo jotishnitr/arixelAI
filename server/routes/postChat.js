@@ -1,10 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const auth = require("../middlewares/auth");
-const postChat = require("../controllers/postChat");
-const postReasoning = require("../controllers/postReasoning");
-
-router.post("/postChat/general", auth, postChat);
-router.post("/postChat/reasoning", auth, postReasoning);
+const modelSelectionController = require("../controllers/modelSelector");
+const { handleChatResponse } = require("../controllers/chatResponse");
+router.route("/postChat").post(auth, modelSelectionController, handleChatResponse);
 
 module.exports = router;
