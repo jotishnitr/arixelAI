@@ -218,14 +218,23 @@ const handleChatResponse = async (req, res) => {
     let successfulModel = null;
     let lastError = null;
 
-    // 4. Iterate over selected models in priority order, protected by modelQueue (RPM & TPM)
+    // 4. Deduplicate candidate models so no model is repeated in the response loop
+    const seen = new Set();
+    const uniqueCandidates = [];
     for (const item of selectedModels) {
       const rawModelId = typeof item === "string" ? item : item.model;
       const provider = ((typeof item === "object" ? item.provider : "") || "gemini").toLowerCase();
-
       if (!rawModelId) continue;
       const modelId = resolveModelForProvider(rawModelId, provider);
+      const key = `${provider}:${modelId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueCandidates.push({ rawModelId, modelId, provider });
+      }
+    }
 
+    // Iterate over unique selected models in priority order, protected by modelQueue (RPM & TPM)
+    for (const { modelId, provider } of uniqueCandidates) {
       try {
         console.log(`[chatResponse] Calling ${provider} [${modelId}] via modelQueue...`);
 
