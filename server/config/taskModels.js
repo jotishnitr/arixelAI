@@ -294,46 +294,28 @@ const TASK_COMPLETION_MODELS = {
 
   image: [
     {
-      provider: "gemini",
-      model: "gemini-2.5-flash-image",
-      displayName: "Nano Banana",
-      bestFunction: "Image generation and image editing (Nano Banana)."
+      provider: "pollinations",
+      model: "flux",
+      displayName: "Pollinations Flux (Image Generation)",
+      bestFunction: "High quality text-to-image generation from user prompts."
     },
     {
-      provider: "gemini",
-      model: "gemini-3-pro-image-preview",
-      displayName: "Nano Banana Pro Preview",
-      bestFunction: "High-quality image generation and editing (Nano Banana Pro)."
+      provider: "pollinations",
+      model: "flux-realism",
+      displayName: "Pollinations Flux Realism",
+      bestFunction: "Photorealistic text-to-image generation."
     },
     {
-      provider: "gemini",
-      model: "gemini-3-pro-image",
-      displayName: "Nano Banana Pro",
-      bestFunction: "Image generation and editing (Nano Banana Pro)."
+      provider: "pollinations",
+      model: "flux-anime",
+      displayName: "Pollinations Flux Anime",
+      bestFunction: "Anime, manga, and cartoon style illustration generation."
     },
     {
-      provider: "gemini",
-      model: "nano-banana-pro-preview",
-      displayName: "Nano Banana Pro Preview",
-      bestFunction: "Image generation and editing (Nano Banana Pro)."
-    },
-    {
-      provider: "gemini",
-      model: "gemini-3.1-flash-image-preview",
-      displayName: "Nano Banana 2 Preview",
-      bestFunction: "Fast image generation and editing (Nano Banana 2)."
-    },
-    {
-      provider: "gemini",
-      model: "gemini-3.1-flash-image",
-      displayName: "Nano Banana 2",
-      bestFunction: "Fast image generation and editing (Nano Banana 2)."
-    },
-    {
-      provider: "gemini",
-      model: "gemini-3.1-flash-lite-image",
-      displayName: "Nano Banana 2 Lite",
-      bestFunction: "Lightweight image generation and editing."
+      provider: "pollinations",
+      model: "turbo",
+      displayName: "Pollinations Turbo",
+      bestFunction: "Ultra-fast text-to-image generation."
     }
   ],
 

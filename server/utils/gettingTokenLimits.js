@@ -7,7 +7,6 @@ const { distributeTokensToUsers } = require("./tokenDistributor");
 // In-flight fetch tracking to avoid redundant concurrent network calls
 const inFlightFetches = {
     gemini: null,
-    cerebras: null,
     openrouter: null,
     groq: null,
 };
@@ -95,14 +94,6 @@ function getGeminiRateLimits(modelName = "") {
 }
 
 /**
- * Resolves standard RPM, TPM, RPD for Cerebras models.
- * Cerebras free tier provides 30 RPM, 60,000 TPM, and 14,400 RPD.
- */
-function getCerebrasRateLimits(modelName = "") {
-    return { rpm: 30, tpm: 60000, rpd: 14400 };
-}
-
-/**
  * Resolves standard RPM, TPM, RPD for Groq models based on Groq published rate limits.
  */
 function getGroqRateLimits(modelName = "") {
@@ -177,41 +168,7 @@ async function fetchGeminiTokens() {
     return { models, dailyLimit };
 }
 
-/**
- * Fetches Cerebras models with their context token limits, RPM, TPM, and RPD.
- */
-async function fetchCerebrasTokens() {
-    const apiKey = process.env.CEREBRAS_API_KEY;
-    if (!apiKey) {
-        console.warn("[gettingTokenLimits] CEREBRAS_API_KEY is missing in environment.");
-        return { models: [], dailyLimit: 50000 };
-    }
 
-    const response = await fetch("https://api.cerebras.ai/v1/models", {
-        headers: {
-            Authorization: `Bearer ${apiKey}`,
-        },
-    });
-
-    if (!response.ok) {
-        throw new Error(`Failed to fetch Cerebras models: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const models = (data.data || []).map((m) => {
-        const limits = getCerebrasRateLimits(m.id);
-        return {
-            model: m.id,
-            contextLength: 8192,
-            rpm: limits.rpm,
-            tpm: limits.tpm,
-            rpd: limits.rpd,
-        };
-    });
-
-    const dailyLimit = 1000000;
-    return { models, dailyLimit };
-}
 
 /**
  * Fetches OpenRouter key info (credits/daily free requests) and free models token limits, RPM, TPM, and RPD.
@@ -355,7 +312,7 @@ async function getOrCreateAppConfig() {
  */
 async function checkAndFetchProviderTokens(provider, force = false) {
     const p = String(provider).toLowerCase();
-    const validProviders = ["gemini", "cerebras", "openrouter", "groq"];
+    const validProviders = ["gemini", "openrouter", "groq"];
     if (!validProviders.includes(p)) {
         throw new Error(`Invalid provider: ${provider}. Must be one of: ${validProviders.join(", ")}`);
     }
@@ -368,25 +325,21 @@ async function checkAndFetchProviderTokens(provider, force = false) {
         try {
             const resetFieldMap = {
                 gemini: "lastGeminiReset",
-                cerebras: "lastCerebrasReset",
                 openrouter: "lastOpenRouterReset",
                 groq: "lastGroqReset",
             };
             const modelsFieldMap = {
                 gemini: "geminiModels",
-                cerebras: "cerebrasModels",
                 openrouter: "openRouterModels",
                 groq: "groqModels",
             };
             const dailyLimitFieldMap = {
                 gemini: "totalGeminiTokensDailyLimit",
-                cerebras: "totalCerebrasTokensDailyLimit",
                 openrouter: "totalOpenRouterTokensDailyLimit",
                 groq: "totalGroqTokensDailyLimit",
             };
             const dailyUsedFieldMap = {
                 gemini: "totalGeminiTokensDailyUsed",
-                cerebras: "totalCerebrasTokensDailyUsed",
                 openrouter: "totalOpenRouterTokensDailyUsed",
                 groq: "totalGroqTokensDailyUsed",
             };
@@ -411,12 +364,6 @@ async function checkAndFetchProviderTokens(provider, force = false) {
                 if (dailyLimit) updateFields[dailyLimitFieldMap.gemini] = dailyLimit;
                 updateFields[dailyUsedFieldMap.gemini] = 0;
                 updateFields[resetFieldMap.gemini] = new Date();
-            } else if (p === "cerebras") {
-                const { models, dailyLimit } = await fetchCerebrasTokens();
-                updateFields[modelsFieldMap.cerebras] = models;
-                if (dailyLimit) updateFields[dailyLimitFieldMap.cerebras] = dailyLimit;
-                updateFields[dailyUsedFieldMap.cerebras] = 0;
-                updateFields[resetFieldMap.cerebras] = new Date();
             } else if (p === "openrouter") {
                 const { models, keyInfo, dailyLimit } = await fetchOpenRouterTokens();
                 updateFields[modelsFieldMap.openrouter] = models;
@@ -458,7 +405,7 @@ async function checkAndFetchProviderTokens(provider, force = false) {
  * @returns {Promise<{ results: Array, appConfig: Object }>}
  */
 async function checkAndFetchAllTokenLimits(force = false) {
-    const providers = ["gemini", "cerebras", "openrouter", "groq"];
+    const providers = ["gemini", "openrouter", "groq"];
     const results = await Promise.all(
         providers.map((provider) => checkAndFetchProviderTokens(provider, force))
     );
@@ -523,10 +470,9 @@ function initTokenLimitsCron({ runOnStartup = true } = {}) {
     const utcJob = cron.schedule(
         "0 0 * * *",
         async () => {
-            console.log("[gettingTokenLimits Cron] 00:00 UTC reached. Triggering reset sync for Cerebras, OpenRouter, and Groq...");
+            console.log("[gettingTokenLimits Cron] 00:00 UTC reached. Triggering reset sync for OpenRouter and Groq...");
             try {
                 await Promise.allSettled([
-                    checkAndFetchProviderTokens("cerebras", true),
                     checkAndFetchProviderTokens("openrouter", true),
                     checkAndFetchProviderTokens("groq", true),
                 ]);
@@ -563,7 +509,6 @@ function initTokenLimitsCron({ runOnStartup = true } = {}) {
 
 module.exports = {
     fetchGeminiTokens,
-    fetchCerebrasTokens,
     fetchOpenRouterTokens,
     fetchGroqTokens,
     getLastUtcReset,

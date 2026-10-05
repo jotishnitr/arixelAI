@@ -8,11 +8,10 @@ async function tokenDistributor(num = 100) {
 
     // Calculate equal share for 100 users for each model
     const geminiShare = Math.floor((appConfig.totalGeminiTokensDailyLimit || 1000000) / (num * (appConfig.geminiModels.length || 1)));
-    const cerebrasShare = Math.floor((appConfig.totalCerebrasTokensDailyLimit || 1000000) / (num * (appConfig.cerebrasModels.length || 1)));
     const openRouterShare = Math.floor((appConfig.totalOpenRouterTokensDailyLimit || 50000) / (num * (appConfig.openRouterModels.length || 1)));
     const groqShare = Math.floor((appConfig.totalGroqTokensDailyLimit || 500000) / (num * (appConfig.groqModels.length || 1)));
 
-    const geminiModels = appConfig.geminiModels.map((m) => ({
+    const geminiModels = (appConfig.geminiModels || []).map((m) => ({
       model: m.model,
       displayName: m.displayName || m.model,
       dailyTokenCapacity: geminiShare,
@@ -23,17 +22,7 @@ async function tokenDistributor(num = 100) {
       rpd: m.rpd || 0,
     }));
 
-    const cerebrasModels = appConfig.cerebrasModels.map((m) => ({
-      model: m.model,
-      dailyTokenCapacity: cerebrasShare,
-      dailyTokensUsed: 0,
-      totalTokensUsed: 0,
-      rpm: m.rpm || 0,
-      tpm: m.tpm || 0,
-      rpd: m.rpd || 0,
-    }));
-
-    const openRouterModels = appConfig.openRouterModels.map((m) => ({
+    const openRouterModels = (appConfig.openRouterModels || []).map((m) => ({
       model: m.model,
       dailyTokenCapacity: openRouterShare,
       dailyTokensUsed: 0,
@@ -43,7 +32,7 @@ async function tokenDistributor(num = 100) {
       rpd: m.rpd || 0,
     }));
 
-    const groqModels = appConfig.groqModels.map((m) => ({
+    const groqModels = (appConfig.groqModels || []).map((m) => ({
       model: m.model,
       dailyTokenCapacity: groqShare,
       dailyTokensUsed: 0,
@@ -53,11 +42,11 @@ async function tokenDistributor(num = 100) {
       rpd: m.rpd || 0,
     }));
 
-    // Update all users
+    // Update all users (explicitly clear cerebrasModels)
     await User.updateMany({}, {
       $set: {
         geminiModels,
-        cerebrasModels,
+        cerebrasModels: [],
         openRouterModels,
         groqModels,
         dailyTotalTokensUsed: 0,

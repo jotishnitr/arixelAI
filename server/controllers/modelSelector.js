@@ -5,7 +5,6 @@ const { TASK_COMPLETION_MODELS } = require("../config/taskModels");
 const tokenCounter = require("../utils/tokenCounter");
 const tokenChecker = require("../utils/tokenChecker");
 const gemini = require("../utils/geminiClient");
-const cerebras = require("../utils/cerebrasClient");
 const openrouter = require("../utils/openRouter");
 const groq = require("../utils/groqClient");
 const { executeWithModelQueue } = require("../utils/modelQueue");
@@ -283,43 +282,7 @@ const postChat = async (req, res, next) => {
       rpd: model.rpd || 0,
     }));
 
-    const cerebrasTokens = (user.cerebrasModels || []).map((model) => ({
-      model: model.model,
-      provider: "cerebras",
-      dailyTokenCapacity: model.dailyTokenCapacity || 0,
-      dailyTokensUsed: model.dailyTokensUsed || 0,
-      providerRemainingTokens: Math.max(0, (model.dailyTokenCapacity || 0) - (model.dailyTokensUsed || 0)),
-      totalTokensUsed: model.totalTokensUsed || 0,
-      rpm: model.rpm || 0,
-      tpm: model.tpm || 0,
-      rpd: model.rpd || 0,
-    }));
-
-    const openRouterTokens = (user.openRouterModels || []).map((model) => ({
-      model: model.model,
-      provider: "openrouter",
-      dailyTokenCapacity: model.dailyTokenCapacity || 0,
-      dailyTokensUsed: model.dailyTokensUsed || 0,
-      providerRemainingTokens: Math.max(0, (model.dailyTokenCapacity || 0) - (model.dailyTokensUsed || 0)),
-      totalTokensUsed: model.totalTokensUsed || 0,
-      rpm: model.rpm || 0,
-      tpm: model.tpm || 0,
-      rpd: model.rpd || 0,
-    }));
-
-    const groqTokens = (user.groqModels || []).map((model) => ({
-      model: model.model,
-      provider: "groq",
-      dailyTokenCapacity: model.dailyTokenCapacity || 0,
-      dailyTokensUsed: model.dailyTokensUsed || 0,
-      providerRemainingTokens: Math.max(0, (model.dailyTokenCapacity || 0) - (model.dailyTokensUsed || 0)),
-      totalTokensUsed: model.totalTokensUsed || 0,
-      rpm: model.rpm || 0,
-      tpm: model.tpm || 0,
-      rpd: model.rpd || 0,
-    }));
-
-    const userCurrentTokens = [...geminiTokens, ...cerebrasTokens, ...openRouterTokens, ...groqTokens];
+    const userCurrentTokens = [...geminiTokens, ...openRouterTokens, ...groqTokens];
 
     // Compute task required tokens
     const taskRequiredTokens = tokenCounter.calculateRequiredTokens(enrichedText || text, chat.messages);
@@ -363,7 +326,18 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
 
     let selectedModels = null;
 
-    for (const selection_model of MODEL_SELECTION_MODELS) {
+    // Fast path: If prompt is clearly requesting image generation, route directly to Pollinations
+    const isImageIntent =
+      /^\s*(generate|create|draw|make|render)\s+(an?\s+)?(image|picture|photo|illustration|drawing|portrait|wallpaper)\b/i.test(enrichedText || text || "") ||
+      /^\s*(picture|photo|image|drawing|illustration)\s+of\b/i.test(enrichedText || text || "");
+
+    if (isImageIntent) {
+      selectedModels = [{ model: "flux", provider: "pollinations" }];
+      console.log("[modelSelector] Image generation intent detected. Direct routing to pollinations [flux].");
+    }
+
+    if (!selectedModels) {
+      for (const selection_model of MODEL_SELECTION_MODELS) {
       // Check if user has sufficient tokens for this selection model call
       const modelTokens = tokenChecker(selection_model, userCurrentTokens, selectionCheckTokens);
 
@@ -388,16 +362,6 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
                   },
                 });
                 return parseSelectionOutput(response?.text);
-              } else if (provider === "cerebras") {
-                const completion = await cerebras.chat.completions.create({
-                  model: executeModelName,
-                  messages: [
-                    { role: "system", content: Model_selection_prompt },
-                    { role: "user", content: selectionInputPayload },
-                  ],
-                  response_format: { type: "json_object" },
-                });
-                return parseSelectionOutput(completion.choices?.[0]?.message?.content);
               } else if (provider === "groq") {
                 const completion = await groq.chat.completions.create({
                   model: executeModelName,
@@ -478,6 +442,7 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
         }
       }
     }
+  }
 
     // Fallback: If AI selection models are down or rate limited, provide high-performance candidates
     if (!selectedModels || !Array.isArray(selectedModels) || selectedModels.length === 0) {

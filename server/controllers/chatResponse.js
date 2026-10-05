@@ -1,7 +1,6 @@
 const User = require("../models/UserModel");
 const Chat = require("../models/ChatModel");
 const gemini = require("../utils/geminiClient");
-const cerebras = require("../utils/cerebrasClient");
 const groq = require("../utils/groqClient");
 const openrouter = require("../utils/openRouter");
 const { getRepoCodeContext } = require("../utils/githubRepoHelper");
@@ -254,12 +253,11 @@ const handleChatResponse = async (req, res) => {
               return result?.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
             }
 
-            if (provider === "cerebras") {
-              const completion = await cerebras.chat.completions.create({
-                model: modelId,
-                messages: openAiMessages,
-              });
-              return completion.choices?.[0]?.message?.content || "";
+            if (provider === "pollinations") {
+              const cleanPrompt = (promptText || "").replace(/^(generate|create|draw|make)\s+(an?\s+)?(image|picture|photo|illustration|drawing)\s+(of\s+)?/i, "").trim() || promptText;
+              const encoded = encodeURIComponent(cleanPrompt);
+              const selectedModel = modelId && modelId !== "pollinations" ? modelId : "flux";
+              return `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&model=${selectedModel}&nologo=true`;
             }
 
             if (provider === "groq") {

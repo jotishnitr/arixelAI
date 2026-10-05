@@ -50,15 +50,13 @@ const getTokenStats = async (req, res) => {
       });
 
     const geminiModels = mapModels(user.geminiModels, "gemini");
-    const cerebrasModels = mapModels(user.cerebrasModels, "cerebras");
     const groqModels = mapModels(user.groqModels, "groq");
     const openRouterModels = mapModels(user.openRouterModels, "openrouter");
 
     const allModels = [
       ...geminiModels,
-      ...cerebrasModels,
-      ...groqModels,
       ...openRouterModels,
+      ...groqModels,
     ];
 
     // Compute aggregated token metrics
@@ -88,15 +86,6 @@ const getTokenStats = async (req, res) => {
             (user.dailyGeminiTokenCapacity || 0) - (user.dailyGeminiTokenUsed || 0)
           ),
           modelsCount: geminiModels.length,
-        },
-        cerebras: {
-          dailyCapacity: user.dailyCerebrasTokenCapacity || 0,
-          dailyUsed: user.dailyCerebrasTokenUsed || 0,
-          remaining: Math.max(
-            0,
-            (user.dailyCerebrasTokenCapacity || 0) - (user.dailyCerebrasTokenUsed || 0)
-          ),
-          modelsCount: cerebrasModels.length,
         },
         groq: {
           dailyCapacity: user.dailyGroqTokenCapacity || 0,

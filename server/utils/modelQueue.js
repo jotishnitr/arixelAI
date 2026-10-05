@@ -15,7 +15,6 @@ async function getModelLimits(modelName, provider = "") {
       if (config) {
         const models = [
           ...(config.geminiModels || []),
-          ...(config.cerebrasModels || []),
           ...(config.openRouterModels || []),
           ...(config.groqModels || []),
         ];
