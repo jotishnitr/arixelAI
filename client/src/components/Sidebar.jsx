@@ -8,6 +8,24 @@ import { API_BASE_URL } from "../config";
 export default function Sidebar({ context, setContext, currentState, setCurrentState, currentContext, setCurrentContext, contextHistory, setContextHistory, getContextHistory, isSidebarOpen, setIsSidebarOpen }) {
   const [currentChat, setCurrentChat] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
+  const [tokenStats, setTokenStats] = useState(null);
+
+  useEffect(() => {
+    const fetchTokens = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/getTokenStats`, {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) setTokenStats(data);
+        }
+      } catch (err) {
+        console.warn("Could not fetch token stats in sidebar:", err.message);
+      }
+    };
+    fetchTokens();
+  }, [contextHistory]);
 
   useEffect(() => {
     const handleOutsideClick = () => {
@@ -147,6 +165,28 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
       </div>
 
       <div className="user-section">
+        {tokenStats?.summary && (
+          <div
+            className="sidebar-tokens-badge"
+            title={`Daily Capacity: ${tokenStats.summary.totalDailyCapacity?.toLocaleString()} tokens`}
+            onClick={() => { setCurrentState("profile"); setIsSidebarOpen(false); }}
+          >
+            <div className="tokens-badge-top">
+              <span className="tokens-badge-title">⚡ Daily Tokens</span>
+              <span className="tokens-badge-count">
+                {tokenStats.summary.remainingDailyTokens?.toLocaleString()}
+              </span>
+            </div>
+            <div className="tokens-badge-bar-bg">
+              <div
+                className="tokens-badge-bar-fill"
+                style={{
+                  width: `${Math.min(100, Math.max(5, ((tokenStats.summary.remainingDailyTokens || 0) / (tokenStats.summary.totalDailyCapacity || 1)) * 100))}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
         <div
           className={currentState === "profile" ? "profile-container-active" : "profile-container"}
           onClick={() => { setCurrentState("profile"); setIsSidebarOpen(false); }}

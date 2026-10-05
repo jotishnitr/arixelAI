@@ -48,24 +48,7 @@ export default function Chatarea({
   // for text-speech convertion (state)
   const [isListening, setIsListening] = useState(false);
 
-  const [selectedChoice, setSelectedChoice] = useState("general");
-  const [showChoiceDropdown, setShowChoiceDropdown] = useState(false);
-  const choiceDropdownRef = useRef(null);
 
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (
-        choiceDropdownRef.current &&
-        !choiceDropdownRef.current.contains(event.target)
-      ) {
-        setShowChoiceDropdown(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   const startListening = () => {
     if (!recognition) {
@@ -377,92 +360,19 @@ export default function Chatarea({
 
     let response;
     try {
-      if (selectedChoice === "general") {
-        response = await fetch(
-          `${API_BASE_URL}/api/postChat/general`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              text: promptToSend,
-              context: currentContext === "new" ? "" : context,
-              attachment: attachmentObj,
-              repo: attachedRepo,
-            }),
-          },
-        )
-      };
-      if (selectedChoice === "image generation") {
-        response = await fetch(
-          `${API_BASE_URL}/api/postChat/image`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              text: messageToSend,
-              context: currentContext === "new" ? "" : context,
-            }),
-          },
-        )
-      };
-      if (selectedChoice === "coding expert") {
-        response = await fetch(
-          `${API_BASE_URL}/api/postChat/code`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              text: promptToSend,
-              context: currentContext === "new" ? "" : context,
-              repo: attachedRepo,
-            }),
-          },
-        )
-      };
-      if (selectedChoice === "image/doc analysis") {
-        response = await fetch(
-          `${API_BASE_URL}/api/postChat/doc`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              text: promptToSend,
-              context: currentContext === "new" ? "" : context,
-              attachment: attachmentObj,
-              repo: attachedRepo,
-            }),
-          },
-        )
-      };
-      if (selectedChoice === "Math/Reasoning") {
-        response = await fetch(
-          `${API_BASE_URL}/api/postChat/reasoning`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              text: promptToSend,
-              context: currentContext === "new" ? "" : context,
-              repo: attachedRepo,
-            }),
-          },
-        )
-      };
+      response = await fetch(`${API_BASE_URL}/api/postChat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          text: promptToSend,
+          context: currentContext === "new" ? "" : context,
+          attachment: attachmentObj,
+          repo: attachedRepo,
+        }),
+      });
 
 
       const data = await response.json();
@@ -1044,77 +954,7 @@ export default function Chatarea({
               onChange={(e) => setChatInput(e.target.value)}
             />
 
-            <div className="choice-dropdown-wrapper" ref={choiceDropdownRef}>
-              <button
-                className="choice-dropdown-btn"
-                type="button"
-                onClick={() => setShowChoiceDropdown(!showChoiceDropdown)}
-                aria-label="Select mode"
-              >
-                <span className="current-choice-text">
-                  <span className="choice-icon">
-                    {selectedChoice === "general" && "✨"}
-                    {selectedChoice === "coding expert" && "💻"}
-                    {selectedChoice === "image generation" && "🎨"}
-                    {selectedChoice === "image/doc analysis" && "🔍"}
-                    {selectedChoice === "Math/Reasoning" && "🧠"}
-                  </span>
-                  <span className="choice-text-label">{selectedChoice}</span>
-                </span>
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className={`chevron-icon ${showChoiceDropdown ? "open" : ""}`}
-                >
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </button>
 
-              {showChoiceDropdown && (
-                <div className="choice-dropdown-popup">
-                  {[
-                    "general",
-                    "coding expert",
-                    "image generation",
-                    "image/doc analysis",
-                    "Math/Reasoning",
-                  ].map((choice) => (
-                    <button
-                      key={choice}
-                      className={`choice-option-btn ${selectedChoice === choice ? "active" : ""}`}
-                      type="button"
-                      onClick={() => {
-                        setSelectedChoice(choice);
-                        setShowChoiceDropdown(false);
-                      }}
-                    >
-                      {choice === "general" && (
-                        <span className="option-icon">✨</span>
-                      )}
-                      {choice === "coding expert" && (
-                        <span className="option-icon">💻</span>
-                      )}
-                      {choice === "image generation" && (
-                        <span className="option-icon">🎨</span>
-                      )}
-                      {choice === "image/doc analysis" && (
-                        <span className="option-icon">🔍</span>
-                      )}
-                      {choice === "Math/Reasoning" && (
-                        <span className="option-icon">🧠</span>
-                      )}
-                      <span className="option-text">{choice}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
 
             <button
               className={`mic-btn ${isListening ? "listening" : ""}`}

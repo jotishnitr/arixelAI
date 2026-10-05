@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import profileIcon from "../assets/profile.png";
 import "./Profile.css";
 
-const API_BASE_URL = "https://arixelai.onrender.com";
+import { API_BASE_URL } from "../config";
 
 export default function Profile({ setCurrentState }) {
     const [profileState, setProfileState] = useState("display");
@@ -13,6 +13,25 @@ export default function Profile({ setCurrentState }) {
     const [mobile, setMobile] = useState("");
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(true);
+    const [tokenStats, setTokenStats] = useState(null);
+
+    const fetchTokenStats = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/getTokenStats`, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                credentials: "include",
+            });
+            const data = await response.json();
+            if (response.ok && data.success) {
+                setTokenStats(data);
+            }
+        } catch (error) {
+            console.error("Error fetching token stats:", error);
+        }
+    };
 
     const fetchProfile = async () => {
         try {
@@ -40,6 +59,7 @@ export default function Profile({ setCurrentState }) {
 
     useEffect(() => {
         fetchProfile();
+        fetchTokenStats();
     }, []);
 
     async function handleSubmit(e) {
@@ -211,6 +231,72 @@ export default function Profile({ setCurrentState }) {
                                 <span className="detail-value">{mobile || "Not set"}</span>
                             </div>
                         </div>
+
+                        {tokenStats?.summary && (
+                            <div className="profile-tokens-container">
+                                <div className="tokens-header-line">
+                                    <span className="tokens-heading">⚡ Daily Token Quota</span>
+                                    <span className="tokens-tier-pill">
+                                        {tokenStats.summary.subscriptionTier?.toUpperCase() || "FREE"}
+                                    </span>
+                                </div>
+
+                                <div className="tokens-progress-bg">
+                                    <div
+                                        className="tokens-progress-bar"
+                                        style={{
+                                            width: `${Math.min(
+                                                100,
+                                                Math.max(
+                                                    0,
+                                                    ((tokenStats.summary.remainingDailyTokens || 0) /
+                                                        (tokenStats.summary.totalDailyCapacity || 1)) *
+                                                        100
+                                                )
+                                            )}%`,
+                                        }}
+                                    />
+                                </div>
+
+                                <div className="tokens-capacity-info">
+                                    <span className="tokens-rem-num">
+                                        <strong>{tokenStats.summary.remainingDailyTokens?.toLocaleString()}</strong> remaining
+                                    </span>
+                                    <span className="tokens-total-num">
+                                        of {tokenStats.summary.totalDailyCapacity?.toLocaleString()} daily
+                                    </span>
+                                </div>
+
+                                {tokenStats.providers && (
+                                    <div className="tokens-provider-grid">
+                                        <div className="provider-stat-card">
+                                            <span className="provider-name">Gemini</span>
+                                            <span className="provider-remaining">
+                                                {tokenStats.providers.gemini.remaining.toLocaleString()} left
+                                            </span>
+                                        </div>
+                                        <div className="provider-stat-card">
+                                            <span className="provider-name">Groq</span>
+                                            <span className="provider-remaining">
+                                                {tokenStats.providers.groq.remaining.toLocaleString()} left
+                                            </span>
+                                        </div>
+                                        <div className="provider-stat-card">
+                                            <span className="provider-name">Cerebras</span>
+                                            <span className="provider-remaining">
+                                                {tokenStats.providers.cerebras.remaining.toLocaleString()} left
+                                            </span>
+                                        </div>
+                                        <div className="provider-stat-card">
+                                            <span className="provider-name">OpenRouter</span>
+                                            <span className="provider-remaining">
+                                                {tokenStats.providers.openrouter.remaining.toLocaleString()} left
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         <div className="profile-display-actions">
                             <button className="edit-btn" onClick={() => setProfileState("edit")}>Edit Profile</button>

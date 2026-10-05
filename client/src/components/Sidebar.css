@@ -250,6 +250,54 @@
   gap: 10px;
 }
 
+.sidebar-tokens-badge {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(208, 188, 255, 0.15);
+  border-radius: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sidebar-tokens-badge:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(208, 188, 255, 0.3);
+}
+
+.tokens-badge-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.tokens-badge-title {
+  color: #CBC3D7;
+  font-weight: 500;
+}
+
+.tokens-badge-count {
+  color: #a078ff;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.tokens-badge-bar-bg {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.tokens-badge-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8b5cf6, #38bdf8);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
 .settings-container,
 .profile-container,
 .profile-container-active {
