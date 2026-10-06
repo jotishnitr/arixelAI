@@ -126,15 +126,16 @@ function resolveModelForProvider(modelId, provider) {
   if (p === "groq") {
     if (m === "gpt-oss-120b" || m.endsWith("/gpt-oss-120b")) return "openai/gpt-oss-120b";
     if (m === "gpt-oss-20b" || m.endsWith("/gpt-oss-20b")) return "openai/gpt-oss-20b";
-    if (m.includes("qwen")) return "meta-llama/llama-4-scout-17b-16k";
+    if (m.includes("llama-4") || m.includes("scout") || m.includes("qwen")) return "openai/gpt-oss-20b";
     return m;
   }
 
   if (p === "gemini") {
+    if (m.includes("deep-research") || m.includes("antigravity") || m.includes("robotics")) return "gemini-3.5-flash-lite";
     if (m === "gemini-3.5-flash") return "gemini-3.5-flash-lite";
     if (m === "gemini-3.6-flash") return "gemini-3.8-flash"; // Reliable fallback when 3.6 encounters 503 high demand
     if (m === "gemini-2.5-flash" || m === "gemini-2.5-flash-lite") return "gemini-flash-latest";
-    if (m === "gemini-2.5-pro") return "gemini-pro-latest";
+    if (m === "gemini-2.5-pro") return "gemini-3.5-flash";
     return m;
   }
 
@@ -324,6 +325,60 @@ const handleChatResponse = async (req, res) => {
       } catch (err) {
         console.warn(`[chatResponse] Model ${provider} [${modelId}] failed: ${err.message}. Trying next fallback...`);
         lastError = err;
+      }
+    }
+
+    // Safety net: If candidate models failed (due to upstream 503 or transient outage), try emergency multi-provider fallbacks
+    if (!finalResponse) {
+      const emergencyFallbacks = [
+        { modelId: "openai/gpt-oss-120b", provider: "groq" },
+        { modelId: "inclusionai/ling-3.0-flash-sante:free", provider: "openrouter" },
+        { modelId: "gemini-3.5-flash-lite", provider: "gemini" },
+      ];
+
+      for (const { modelId, provider } of emergencyFallbacks) {
+        try {
+          console.log(`[chatResponse] Attempting emergency safety fallback with ${provider} [${modelId}]...`);
+          const responseText = await executeWithModelQueue({
+            model: modelId,
+            provider,
+            estimatedTokens,
+            fn: async () => {
+              if (provider === "gemini") {
+                const result = await gemini.models.generateContent({
+                  model: modelId,
+                  contents: geminiContents,
+                  config: { systemInstruction: SYSTEM_PROMPT },
+                });
+                return result?.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+              }
+              if (provider === "groq") {
+                const completion = await groq.chat.completions.create({
+                  model: modelId,
+                  messages: openAiMessages,
+                });
+                return completion.choices?.[0]?.message?.content || "";
+              }
+              if (provider === "openrouter") {
+                const completion = await openrouter.chat.completions.create({
+                  model: modelId,
+                  messages: openAiMessages,
+                });
+                return completion.choices?.[0]?.message?.content || "";
+              }
+              return "";
+            },
+          });
+
+          if (responseText) {
+            finalResponse = responseText;
+            successfulModel = { model: modelId, provider };
+            console.log(`[chatResponse] Emergency fallback succeeded with ${provider} [${modelId}]`);
+            break;
+          }
+        } catch (emErr) {
+          console.warn(`[chatResponse] Emergency fallback ${provider} [${modelId}] failed:`, emErr.message);
+        }
       }
     }
 

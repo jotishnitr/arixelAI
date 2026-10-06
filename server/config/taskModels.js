@@ -151,12 +151,6 @@ const TASK_COMPLETION_MODELS = {
     },
     {
       provider: "groq",
-      model: "meta-llama/llama-4-scout-17b-16k",
-      displayName: "Llama 4 Scout 17B (Groq)",
-      bestFunction: "Ultra-fast general reasoning and high-speed generation."
-    },
-    {
-      provider: "groq",
       model: "openai/gpt-oss-20b",
       displayName: "GPT OSS 20B",
       bestFunction: "Efficient general reasoning and coding."
@@ -220,8 +214,8 @@ const TASK_COMPLETION_MODELS = {
     },
     {
       provider: "groq",
-      model: "meta-llama/llama-4-scout-17b-16k",
-      displayName: "Llama 4 Scout 17B Coding (Groq)",
+      model: "openai/gpt-oss-20b",
+      displayName: "GPT OSS 20B Coding (Groq)",
       bestFunction: "Ultra-fast low-latency code completion."
     }
   ],
@@ -229,27 +223,33 @@ const TASK_COMPLETION_MODELS = {
   research: [
     {
       provider: "gemini",
-      model: "deep-research-max-preview-04-2026",
-      displayName: "Deep Research Max Preview (Apr-21-2026)",
-      bestFunction: "Deep research and comprehensive information synthesis."
+      model: "gemini-3.5-flash",
+      displayName: "Gemini 3.5 Flash Research",
+      bestFunction: "Fast high-capability research, evidence synthesis, and complex analysis."
     },
     {
       provider: "gemini",
-      model: "deep-research-preview-04-2026",
-      displayName: "Deep Research Preview (Apr-21-2026)",
-      bestFunction: "Research-heavy investigation and synthesis."
-    },
-    {
-      provider: "gemini",
-      model: "deep-research-pro-preview-12-2025",
-      displayName: "Deep Research Pro Preview (Dec-12-2025)",
-      bestFunction: "Advanced research and evidence-oriented synthesis."
+      model: "gemini-3.5-flash-lite",
+      displayName: "Gemini 3.5 Flash Lite Research",
+      bestFunction: "Economical and fast document synthesis."
     },
     {
       provider: "openrouter",
       model: "nvidia/nemotron-3-ultra-550b-a55b:free",
       displayName: "Nemotron 3 Ultra 550B Research",
       bestFunction: "Long-context deep document research and evidence synthesis."
+    },
+    {
+      provider: "openrouter",
+      model: "nvidia/nemotron-3-super-120b-a12b:free",
+      displayName: "Nemotron 3 Super 120B Research",
+      bestFunction: "High-capacity evidence synthesis and reasoning."
+    },
+    {
+      provider: "groq",
+      model: "openai/gpt-oss-120b",
+      displayName: "GPT OSS 120B Research",
+      bestFunction: "Fast extensive research and structured reasoning."
     },
     {
       provider: "openrouter",
@@ -262,33 +262,33 @@ const TASK_COMPLETION_MODELS = {
   agentic: [
     {
       provider: "gemini",
-      model: "antigravity-preview-latest",
-      displayName: "Antigravity Agent Preview Latest",
-      bestFunction: "Agentic multi-step task execution."
+      model: "gemini-3.5-flash",
+      displayName: "Gemini 3.5 Flash Agentic",
+      bestFunction: "Multi-step tool invocation, planning, and task execution."
     },
     {
       provider: "gemini",
-      model: "antigravity-preview-09-2026",
-      displayName: "Antigravity Agent Preview (Sep-2026)",
-      bestFunction: "Agentic multi-step task execution."
+      model: "gemini-3.5-flash-lite",
+      displayName: "Gemini 3.5 Flash Lite Agentic",
+      bestFunction: "Fast economical agent workflows and planning."
     },
     {
-      provider: "gemini",
-      model: "antigravity-preview-05-2026",
-      displayName: "Antigravity Agent Preview (May-2026)",
-      bestFunction: "Agentic multi-step task execution."
+      provider: "openrouter",
+      model: "nvidia/nemotron-3.5-lightning:free",
+      displayName: "Nemotron 3.5 Lightning Agentic",
+      bestFunction: "Ultra-fast tool orchestration and step execution."
     },
     {
       provider: "openrouter",
       model: "nvidia/nemotron-3-super-120b-a12b:free",
       displayName: "Nemotron 3 Super 120B Agentic",
-      bestFunction: "Multi-step tool invocation, planning, and task execution."
+      bestFunction: "Multi-step planning, synthesis, and execution."
     },
     {
-      provider: "openrouter",
-      model: "nvidia/nemotron-3.5-lightning:free",
-      displayName: "Nemotron 3.5 Lightning (Free)",
-      bestFunction: "Autonomous function calling and workflow execution."
+      provider: "groq",
+      model: "openai/gpt-oss-120b",
+      displayName: "GPT OSS 120B Agentic",
+      bestFunction: "High-speed autonomous execution and function calling."
     }
   ],
 

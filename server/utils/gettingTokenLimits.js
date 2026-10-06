@@ -140,14 +140,6 @@ async function fetchGeminiTokens() {
     }
 
     const data = await response.json();
-    const excludedGemini = new Set([
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-        "gemini-2.5-flash-lite",
-        "gemini-pro-latest",
-        "gemini-3.1-pro-preview",
-        "gemini-3.1-pro-preview-customtools",
-    ]);
     const models = (data.models || [])
         .map((m) => {
             const modelName = m.name ? m.name.replace(/^models\//, "") : "";
@@ -162,7 +154,28 @@ async function fetchGeminiTokens() {
                 rpd: limits.rpd,
             };
         })
-        .filter((m) => m.model && !excludedGemini.has(m.model));
+        .filter((m) => {
+            if (!m.model) return false;
+            const name = m.model.toLowerCase();
+            if (
+                name.includes("deep-research") ||
+                name.includes("antigravity") ||
+                name.includes("robotics") ||
+                name.includes("computer-use") ||
+                name.includes("veo") ||
+                name.includes("lyria") ||
+                name.includes("tts") ||
+                name.includes("transcribe") ||
+                name.includes("embedding") ||
+                name.includes("image-preview") ||
+                name.includes("pro-preview") ||
+                name.includes("2.5-flash") ||
+                name.includes("2.5-pro")
+            ) {
+                return false;
+            }
+            return true;
+        });
 
     const dailyLimit = 1000000;
     return { models, dailyLimit };
@@ -422,9 +435,9 @@ async function checkAndFetchAllTokenLimits(force = false) {
 
     const appConfig = await AppConfiguration.findOne();
 
-    // Automatically distribute updated model tokens equally to 100 users
+    // Automatically distribute updated model tokens without resetting user balances
     try {
-        await distributeTokensToUsers(100);
+        await distributeTokensToUsers(100, false);
     } catch (err) {
         console.error("[gettingTokenLimits] Error distributing tokens to users:", err.message);
     }
@@ -486,7 +499,7 @@ function initTokenLimitsCron({ runOnStartup = true } = {}) {
                     checkAndFetchProviderTokens("openrouter", true),
                     checkAndFetchProviderTokens("groq", true),
                 ]);
-                await distributeTokensToUsers(100);
+                await distributeTokensToUsers(100, true);
             } catch (err) {
                 console.error("[gettingTokenLimits Cron] Error during UTC reset sync:", err.message);
             }
@@ -503,7 +516,7 @@ function initTokenLimitsCron({ runOnStartup = true } = {}) {
             console.log("[gettingTokenLimits Cron] 00:00 Pacific Time reached. Triggering reset sync for Gemini...");
             try {
                 await checkAndFetchProviderTokens("gemini", true);
-                await distributeTokensToUsers(100);
+                await distributeTokensToUsers(100, true);
             } catch (err) {
                 console.error("[gettingTokenLimits Cron] Error during Gemini Pacific reset sync:", err.message);
             }

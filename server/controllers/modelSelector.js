@@ -143,7 +143,7 @@ const MODEL_SELECTION_MODELS = [
 
   // Ultra-fast Groq selection models
   "openai/gpt-oss-120b",
-  "meta-llama/llama-4-scout-17b-16k",
+  "openai/gpt-oss-20b",
 
   // Verified free OpenRouter models
   "inclusionai/ling-3.0-flash-sante:free",
@@ -164,7 +164,7 @@ const MODEL_EXECUTION_MAP = {
   "gemini-flash-latest": { provider: "gemini", actualModel: "gemini-flash-latest" },
 
   "openai/gpt-oss-120b": { provider: "groq", actualModel: "openai/gpt-oss-120b" },
-  "meta-llama/llama-4-scout-17b-16k": { provider: "groq", actualModel: "meta-llama/llama-4-scout-17b-16k" },
+  "openai/gpt-oss-20b": { provider: "groq", actualModel: "openai/gpt-oss-20b" },
 
   "inclusionai/ling-3.0-flash-sante:free": { provider: "openrouter", actualModel: "inclusionai/ling-3.0-flash-sante:free" },
   "nvidia/nemotron-3.5-lightning:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3.5-lightning:free" },
@@ -527,8 +527,18 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
         { model: "google/gemma-4-26b-a4b-it:free", provider: "openrouter" },
         { model: "cohere/north-mini-code:free", provider: "openrouter" },
         { model: "gemini-flash-latest", provider: "gemini" },
-        { model: "meta-llama/llama-4-scout-17b-16k", provider: "groq" },
+        { model: "openai/gpt-oss-20b", provider: "groq" },
       ];
+    }
+
+    // Ensure selectedModels has at least 2 distinct candidates across providers for resilience
+    if (selectedModels && Array.isArray(selectedModels) && selectedModels.length === 1) {
+      const first = selectedModels[0];
+      const safetyFallback =
+        first.provider === "gemini"
+          ? { model: "inclusionai/ling-3.0-flash-sante:free", provider: "openrouter" }
+          : { model: "gemini-3.5-flash-lite", provider: "gemini" };
+      selectedModels.push(safetyFallback);
     }
 
     // Attach data to request for downstream chatResponse controller

@@ -25,5 +25,7 @@ if (process.env.GITHUB_APP_ID && privateKey) {
 }
 
 module.exports = githubApp;
-module.exports.githubApp = githubApp;
+if (githubApp) {
+  module.exports.githubApp = githubApp;
+}
 

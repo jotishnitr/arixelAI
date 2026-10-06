@@ -67,6 +67,7 @@ async function getOrCreateModelQueue(modelName, provider) {
  */
 async function waitForTpmAvailability(entry, estimatedTokens) {
   const ONE_MINUTE = 60 * 1000;
+  const tpmLimit = Math.max(1000, entry.tpm || 1000000);
 
   while (true) {
     const now = Date.now();
@@ -77,16 +78,16 @@ async function waitForTpmAvailability(entry, estimatedTokens) {
     // Sum up tokens used in the last 60 seconds
     const usedTokens = entry.tokenHistory.reduce((sum, item) => sum + item.tokens, 0);
 
-    // If within TPM quota, proceed
-    if (usedTokens + estimatedTokens <= entry.tpm) {
+    // If within TPM quota or no tokens have been consumed yet in the current window, proceed
+    if (usedTokens === 0 || usedTokens + estimatedTokens <= tpmLimit) {
       break;
     }
 
     // Otherwise wait until the oldest token entry expires from the 1-minute window
     const oldestTimestamp = entry.tokenHistory[0]?.timestamp || now;
-    const waitMs = Math.max(50, ONE_MINUTE - (now - oldestTimestamp) + 50);
+    const waitMs = Math.min(ONE_MINUTE, Math.max(100, ONE_MINUTE - (now - oldestTimestamp) + 50));
 
-    console.log(`[modelQueue] TPM limit reached (${usedTokens}/${entry.tpm}). Waiting ${waitMs}ms...`);
+    console.log(`[modelQueue] TPM limit reached (${usedTokens}/${tpmLimit}). Waiting ${waitMs}ms...`);
     await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 }
