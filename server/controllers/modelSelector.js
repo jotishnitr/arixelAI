@@ -453,10 +453,11 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
             // Deduct / update user's token usage for running the selection model
             if (dbUserId) {
               try {
-                const selectionTokensUsed =
-                  tokenCounter.estimateTokens(selectionInputPayload) +
-                  tokenCounter.estimateTokens(Model_selection_prompt) +
-                  tokenCounter.estimateTokens(JSON.stringify(result));
+                // Measure fair selection overhead for user prompt (not charging massive internal prompt)
+                const selectionTokensUsed = Math.min(
+                  250,
+                  tokenCounter.estimateTokens(text) + 100
+                );
 
                 const providerFieldMap = {
                   gemini: "dailyGeminiTokenUsed",
@@ -476,8 +477,15 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
                   updateQuery.$inc[providerDailyField] = selectionTokensUsed;
                 }
 
-                const modelsArrayKey = `${provider}Models`;
-                await User.updateOne(
+                // Correct schema array mapping (openRouterModels has camelCase 'R')
+                const schemaModelsMap = {
+                  gemini: "geminiModels",
+                  groq: "groqModels",
+                  openrouter: "openRouterModels",
+                };
+                const modelsArrayKey = schemaModelsMap[provider] || `${provider}Models`;
+
+                const updateResult = await User.updateOne(
                   { _id: dbUserId, [`${modelsArrayKey}.model`]: modelTokens.model.model },
                   {
                     ...updateQuery,
@@ -488,6 +496,10 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
                     },
                   }
                 );
+
+                if (updateResult.matchedCount === 0) {
+                  await User.updateOne({ _id: dbUserId }, updateQuery);
+                }
                 console.log(`[modelSelector] Updated user tokens (+${selectionTokensUsed}) for selection model [${selection_model}]`);
               } catch (tokenErr) {
                 console.warn("[modelSelector] Failed to update user tokens for selection step:", tokenErr.message);

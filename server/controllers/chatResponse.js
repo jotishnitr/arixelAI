@@ -405,8 +405,15 @@ const handleChatResponse = async (req, res) => {
           updateFields.$inc[providerDailyField] = actualTokens;
         }
 
-        const modelsArrayKey = `${successfulModel.provider}Models`;
-        await User.updateOne(
+        // Correct schema array mapping (openRouterModels has camelCase 'R')
+        const schemaModelsMap = {
+          gemini: "geminiModels",
+          groq: "groqModels",
+          openrouter: "openRouterModels",
+        };
+        const modelsArrayKey = schemaModelsMap[successfulModel.provider] || `${successfulModel.provider}Models`;
+
+        const updateResult = await User.updateOne(
           { _id: dbUserId, [`${modelsArrayKey}.model`]: successfulModel.model },
           {
             ...updateFields,
@@ -417,6 +424,11 @@ const handleChatResponse = async (req, res) => {
             },
           }
         );
+
+        // If exact model was not in the array, still update the user's daily totals
+        if (updateResult.matchedCount === 0) {
+          await User.updateOne({ _id: dbUserId }, updateFields);
+        }
       } catch (tokenErr) {
         console.warn("[chatResponse] Failed to update user token counters:", tokenErr.message);
       }
