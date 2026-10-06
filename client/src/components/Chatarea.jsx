@@ -45,6 +45,38 @@ export default function Chatarea({
   const [githubError, setGithubError] = useState("");
   const [allowReadCode, setAllowReadCode] = useState(false);
 
+  // Prompt Token Inspector state
+  const [showPromptTokens, setShowPromptTokens] = useState(false);
+  const [activePromptTokenIndex, setActivePromptTokenIndex] = useState(null);
+  const popoverRef = useRef(null);
+
+  // Click outside listener for token popover
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (popoverRef.current && !popoverRef.current.contains(event.target)) {
+        setShowPromptTokens(false);
+      }
+    }
+    if (showPromptTokens) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showPromptTokens]);
+
+  const currentPromptTokens = chatInput.trim()
+    ? Math.ceil(chatInput.trim().length / 3.8)
+    : 0;
+  const currentPromptWords = chatInput.trim()
+    ? chatInput.trim().split(/\s+/).filter(Boolean).length
+    : 0;
+  const currentPromptChars = chatInput.length;
+  const fileTokensEstimate = selectedFile ? 250 : 0;
+  const repoTokensEstimate = selectedRepo ? (allowReadCode ? 1200 : 80) : 0;
+  const totalEstimatedPromptTokens =
+    currentPromptTokens + fileTokensEstimate + repoTokensEstimate;
+
   // for text-speech convertion (state)
   const [isListening, setIsListening] = useState(false);
 
@@ -684,6 +716,72 @@ export default function Chatarea({
                         )}
                       </div>
                     )}
+                  {msg.role === "user" && (
+                    <div className="user-message-footer">
+                      <button
+                        type="button"
+                        className="user-token-inspect-btn"
+                        onClick={() =>
+                          setActivePromptTokenIndex(
+                            activePromptTokenIndex === index ? null : index
+                          )
+                        }
+                        title="Click to view token usage for this prompt"
+                      >
+                        <svg
+                          width="11"
+                          height="11"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                        <span>
+                          {activePromptTokenIndex === index
+                            ? "Hide tokens"
+                            : `⚡ ~${Math.ceil((msg.content?.length || 0) / 3.8)} tokens`}
+                        </span>
+                      </button>
+                      {activePromptTokenIndex === index && (
+                        <div className="user-token-breakdown-card">
+                          <div className="token-breakdown-title">
+                            Prompt Token Analysis
+                          </div>
+                          <div className="token-breakdown-row">
+                            <span>Prompt Tokens:</span>
+                            <strong className="token-value-highlight">
+                              ~{Math.ceil((msg.content?.length || 0) / 3.8)}
+                            </strong>
+                          </div>
+                          <div className="token-breakdown-row">
+                            <span>Characters:</span>
+                            <span>{msg.content?.length || 0}</span>
+                          </div>
+                          <div className="token-breakdown-row">
+                            <span>Words:</span>
+                            <span>
+                              {msg.content
+                                ? msg.content
+                                    .trim()
+                                    .split(/\s+/)
+                                    .filter(Boolean).length
+                                : 0}
+                            </span>
+                          </div>
+                          {msg.attachment && (
+                            <div className="token-breakdown-row">
+                              <span>Attachment:</span>
+                              <span>{msg.attachment.name || "Attached file"}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -1036,6 +1134,106 @@ export default function Chatarea({
           </div>
           <div className="input-footer-row">
             <div className="model-info">Model: Core-1o</div>
+            <div className="prompt-token-bar-item" ref={popoverRef}>
+              <button
+                type="button"
+                className={`prompt-tokens-trigger-btn ${showPromptTokens ? "active" : ""}`}
+                onClick={() => setShowPromptTokens(!showPromptTokens)}
+                title="Click to view token usage for current prompt"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                <span>
+                  {chatInput.trim()
+                    ? `⚡ ~${totalEstimatedPromptTokens} tokens`
+                    : "⚡ Check Prompt Tokens"}
+                </span>
+              </button>
+
+              {showPromptTokens && (
+                <div className="prompt-tokens-popover">
+                  <div className="popover-header">
+                    <div className="popover-title">
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                      </svg>
+                      Current Prompt Tokens
+                    </div>
+                    <button
+                      type="button"
+                      className="popover-close-btn"
+                      onClick={() => setShowPromptTokens(false)}
+                      title="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div className="popover-body">
+                    <div className="popover-metric-hero">
+                      <span className="popover-metric-number">
+                        {totalEstimatedPromptTokens}
+                      </span>
+                      <span className="popover-metric-label">Estimated Tokens</span>
+                    </div>
+
+                    <div className="popover-stat-grid">
+                      <div className="popover-stat-item">
+                        <span className="stat-label">Prompt Text</span>
+                        <span className="stat-val">{currentPromptTokens} tokens</span>
+                      </div>
+                      <div className="popover-stat-item">
+                        <span className="stat-label">Length</span>
+                        <span className="stat-val">{currentPromptChars} chars</span>
+                      </div>
+                      <div className="popover-stat-item">
+                        <span className="stat-label">Words</span>
+                        <span className="stat-val">{currentPromptWords} words</span>
+                      </div>
+                      <div className="popover-stat-item">
+                        <span className="stat-label">Context Ratio</span>
+                        <span className="stat-val">~3.8 ch/tok</span>
+                      </div>
+                      {selectedFile && (
+                        <div className="popover-stat-item full-width">
+                          <span className="stat-label">File Overhead</span>
+                          <span className="stat-val">+{fileTokensEstimate} tokens ({selectedFile.name})</span>
+                        </div>
+                      )}
+                      {selectedRepo && (
+                        <div className="popover-stat-item full-width">
+                          <span className="stat-label">GitHub Repo Context</span>
+                          <span className="stat-val">+{repoTokensEstimate} tokens ({selectedRepo.fullName})</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="popover-formula-note">
+                      Estimated using standard AI tokenizer ratio (~3.8 characters per token).
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -95,8 +95,8 @@ const TASK_COMPLETION_MODELS = {
     },
     {
       provider: "openrouter",
-      model: "qwen/qwen3.8-27b:free",
-      displayName: "Qwen 3.8 27B",
+      model: "google/gemma-4-26b-a4b-it:free",
+      displayName: "Gemma 4 26B A4B IT (Free)",
       bestFunction: "General reasoning, coding, and multilingual generation."
     },
     {
@@ -151,9 +151,9 @@ const TASK_COMPLETION_MODELS = {
     },
     {
       provider: "groq",
-      model: "qwen/qwen3.8-27b",
-      displayName: "Qwen 3.8 27B (Groq)",
-      bestFunction: "Ultra-fast general reasoning, coding, and generation."
+      model: "meta-llama/llama-4-scout-17b-16k",
+      displayName: "Llama 4 Scout 17B (Groq)",
+      bestFunction: "Ultra-fast general reasoning and high-speed generation."
     },
     {
       provider: "groq",
@@ -184,8 +184,8 @@ const TASK_COMPLETION_MODELS = {
     },
     {
       provider: "openrouter",
-      model: "qwen/qwen3.8-27b:free",
-      displayName: "Qwen 3.8 27B Coding",
+      model: "google/gemma-4-31b-it:free",
+      displayName: "Gemma 4 31B IT Coding (Free)",
       bestFunction: "Code synthesis, algorithm development, and debugging."
     },
     {
@@ -220,8 +220,8 @@ const TASK_COMPLETION_MODELS = {
     },
     {
       provider: "groq",
-      model: "qwen/qwen3.8-27b",
-      displayName: "Qwen 3.8 27B Coding (Groq)",
+      model: "meta-llama/llama-4-scout-17b-16k",
+      displayName: "Llama 4 Scout 17B Coding (Groq)",
       bestFunction: "Ultra-fast low-latency code completion."
     }
   ],
@@ -286,8 +286,8 @@ const TASK_COMPLETION_MODELS = {
     },
     {
       provider: "openrouter",
-      model: "qwen/qwen3.8-27b:free",
-      displayName: "Qwen 3.8 27B Agentic",
+      model: "nvidia/nemotron-3.5-lightning:free",
+      displayName: "Nemotron 3.5 Lightning (Free)",
       bestFunction: "Autonomous function calling and workflow execution."
     }
   ],

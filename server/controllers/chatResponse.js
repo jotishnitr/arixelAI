@@ -126,7 +126,7 @@ function resolveModelForProvider(modelId, provider) {
   if (p === "groq") {
     if (m === "gpt-oss-120b" || m.endsWith("/gpt-oss-120b")) return "openai/gpt-oss-120b";
     if (m === "gpt-oss-20b" || m.endsWith("/gpt-oss-20b")) return "openai/gpt-oss-20b";
-    if (m === "qwen-3.8-27b" || m.endsWith("/qwen3.8-27b") || m.includes("qwen")) return "qwen/qwen3.8-27b";
+    if (m.includes("qwen")) return "meta-llama/llama-4-scout-17b-16k";
     return m;
   }
 
@@ -141,6 +141,12 @@ function resolveModelForProvider(modelId, provider) {
   if (p === "openrouter") {
     if (m.includes("nemotron-3-ultra")) return "nvidia/nemotron-3-ultra-550b-a55b:free";
     if (m.includes("nemotron-3-super")) return "nvidia/nemotron-3-super-120b-a12b:free";
+    if (m.includes("lfm2.5-2.6b") || m.includes("lfm-2.5")) return "liquid/lfm-2.5-2.6b:free";
+    if (m.includes("gemma-4-26b")) return "google/gemma-4-26b-a4b-it:free";
+    if (m.includes("gemma-4-31b")) return "google/gemma-4-31b-it:free";
+    if (m.includes("dots3") || m.includes("dots-3")) return "dots-studio/dots-3-note-preview:free";
+    if (m.includes("nemotron-3-nano")) return "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free";
+    if (m.includes("qwen")) return "inclusionai/ling-3.0-flash-sante:free";
     return m;
   }
 

@@ -6,15 +6,15 @@ async function tokenDistributor(num = 100) {
     const appConfig = await AppConfiguration.findOne();
     if (!appConfig) return;
 
-    // Calculate equal share for 100 users for each model
-    const geminiShare = Math.floor((appConfig.totalGeminiTokensDailyLimit || 1000000) / (num * (appConfig.geminiModels.length || 1)));
-    const openRouterShare = Math.floor((appConfig.totalOpenRouterTokensDailyLimit || 50000) / (num * (appConfig.openRouterModels.length || 1)));
-    const groqShare = Math.floor((appConfig.totalGroqTokensDailyLimit || 500000) / (num * (appConfig.groqModels.length || 1)));
+    // Calculate fair per-user capacity for each provider (not divided by model count)
+    const geminiUserCap = Math.max(10000, Math.floor((appConfig.totalGeminiTokensDailyLimit || 1000000) / num));
+    const openRouterUserCap = Math.max(5000, Math.floor((appConfig.totalOpenRouterTokensDailyLimit || 100000) / num));
+    const groqUserCap = Math.max(10000, Math.floor((appConfig.totalGroqTokensDailyLimit || 500000) / num));
 
     const geminiModels = (appConfig.geminiModels || []).map((m) => ({
       model: m.model,
       displayName: m.displayName || m.model,
-      dailyTokenCapacity: geminiShare,
+      dailyTokenCapacity: geminiUserCap,
       dailyTokensUsed: 0,
       totalTokensUsed: 0,
       rpm: m.rpm || 0,
@@ -24,7 +24,7 @@ async function tokenDistributor(num = 100) {
 
     const openRouterModels = (appConfig.openRouterModels || []).map((m) => ({
       model: m.model,
-      dailyTokenCapacity: openRouterShare,
+      dailyTokenCapacity: openRouterUserCap,
       dailyTokensUsed: 0,
       totalTokensUsed: 0,
       rpm: m.rpm || 0,
@@ -34,7 +34,7 @@ async function tokenDistributor(num = 100) {
 
     const groqModels = (appConfig.groqModels || []).map((m) => ({
       model: m.model,
-      dailyTokenCapacity: groqShare,
+      dailyTokenCapacity: groqUserCap,
       dailyTokensUsed: 0,
       totalTokensUsed: 0,
       rpm: m.rpm || 0,
@@ -48,6 +48,13 @@ async function tokenDistributor(num = 100) {
         geminiModels,
         openRouterModels,
         groqModels,
+        dailyGeminiTokenCapacity: geminiUserCap,
+        dailyOpenRouterTokenCapacity: openRouterUserCap,
+        dailyGroqTokenCapacity: groqUserCap,
+        totalTokensCapacity: geminiUserCap + openRouterUserCap + groqUserCap,
+        dailyGeminiTokenUsed: 0,
+        dailyOpenRouterTokenUsed: 0,
+        dailyGroqTokenUsed: 0,
         dailyTotalTokensUsed: 0,
       },
       $unset: {

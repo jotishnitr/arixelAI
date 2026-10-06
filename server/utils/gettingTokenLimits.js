@@ -221,8 +221,18 @@ async function fetchOpenRouterTokens() {
                     const promptPrice = Number(m.pricing?.prompt || 0);
                     const completionPrice = Number(m.pricing?.completion || 0);
                     if (promptPrice !== 0 || completionPrice !== 0) return false;
-                    // Exclude restricted models that require agentic harnesses or return provider errors
-                    if (m.id.includes("thinkingmachines/") || m.id.startsWith("google/gemma")) return false;
+                    // Exclude non-chat models, decision models, embeddings, audio, and deprecated paid Qwen
+                    if (
+                        m.id.includes("qwen") ||
+                        m.id.includes("thinkingmachines/") ||
+                        m.id.includes("decision") ||
+                        m.id.includes("embed") ||
+                        m.id.includes("rerank") ||
+                        m.id.includes("audio") ||
+                        m.id.includes("content-safety") ||
+                        m.id.startsWith("respan/") ||
+                        m.id.startsWith("inception/")
+                    ) return false;
                     return true;
                 })
                 .map((m) => {

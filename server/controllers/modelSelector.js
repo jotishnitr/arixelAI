@@ -133,29 +133,47 @@ If no eligible model exists, return:
 Do not execute the user's task.
 Only perform model selection.`;
 
-// Model selection list: 6 free, high-capacity Gemini models + 4 verified free OpenRouter models
+// Model selection list: Verified fast free Gemini models, Groq models, and active OpenRouter free models
 const MODEL_SELECTION_MODELS = [
-  // 6 Gemini models (Free tier, 1,000,000 TPM limit)
+  // Fast free Gemini models
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
-  "gemini-3.6-flash",
-  "gemini-flash-lite-latest",
-  "gemini-3.1-flash-lite-preview",
   "gemini-3.5-flash",
+  "gemini-flash-latest",
 
-  // 4 OpenRouter models (Verified free tier, 262k - 1,000k context)
+  // Ultra-fast Groq selection models
+  "openai/gpt-oss-120b",
+  "meta-llama/llama-4-scout-17b-16k",
+
+  // Verified free OpenRouter models
   "inclusionai/ling-3.0-flash-sante:free",
+  "nvidia/nemotron-3.5-lightning:free",
+  "cohere/north-mini-code:free",
   "nvidia/nemotron-3-super-120b-a12b:free",
-  "qwen/qwen3.8-27b:free",
   "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "liquid/lfm-2.5-2.6b:free",
+  "google/gemma-4-26b-a4b-it:free",
+  "google/gemma-4-31b-it:free",
 ];
 
-// Execution mapping for the verified free OpenRouter selection models
+// Execution mapping for the selection models
 const MODEL_EXECUTION_MAP = {
+  "gemini-3.5-flash-lite": { provider: "gemini", actualModel: "gemini-3.5-flash-lite" },
+  "gemini-3.1-flash-lite": { provider: "gemini", actualModel: "gemini-3.1-flash-lite" },
+  "gemini-3.5-flash": { provider: "gemini", actualModel: "gemini-3.5-flash" },
+  "gemini-flash-latest": { provider: "gemini", actualModel: "gemini-flash-latest" },
+
+  "openai/gpt-oss-120b": { provider: "groq", actualModel: "openai/gpt-oss-120b" },
+  "meta-llama/llama-4-scout-17b-16k": { provider: "groq", actualModel: "meta-llama/llama-4-scout-17b-16k" },
+
   "inclusionai/ling-3.0-flash-sante:free": { provider: "openrouter", actualModel: "inclusionai/ling-3.0-flash-sante:free" },
+  "nvidia/nemotron-3.5-lightning:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3.5-lightning:free" },
+  "cohere/north-mini-code:free": { provider: "openrouter", actualModel: "cohere/north-mini-code:free" },
   "nvidia/nemotron-3-super-120b-a12b:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3-super-120b-a12b:free" },
-  "qwen/qwen3.8-27b:free": { provider: "openrouter", actualModel: "qwen/qwen3.8-27b:free" },
   "nvidia/nemotron-3-ultra-550b-a55b:free": { provider: "openrouter", actualModel: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+  "liquid/lfm-2.5-2.6b:free": { provider: "openrouter", actualModel: "liquid/lfm-2.5-2.6b:free" },
+  "google/gemma-4-26b-a4b-it:free": { provider: "openrouter", actualModel: "google/gemma-4-26b-a4b-it:free" },
+  "google/gemma-4-31b-it:free": { provider: "openrouter", actualModel: "google/gemma-4-31b-it:free" },
 };
 
 // Helper to generate a short conversation title from prompt
@@ -207,8 +225,14 @@ const postChat = async (req, res, next) => {
     let user = await User.findById(dbUserId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Auto-heal: If user has no models or DB was cleared, fetch tokens and distribute immediately
-    if (!user.geminiModels || user.geminiModels.length === 0 || !user.openRouterModels || user.openRouterModels.length === 0) {
+    // Auto-heal: If user has no models or has tiny legacy capacity (< 1000 tokens), refresh immediately
+    if (
+      !user.geminiModels ||
+      user.geminiModels.length === 0 ||
+      !user.openRouterModels ||
+      user.openRouterModels.length === 0 ||
+      (user.geminiModels[0] && user.geminiModels[0].dailyTokenCapacity < 1000)
+    ) {
       try {
         const { checkAndFetchAllTokenLimits } = require("../utils/gettingTokenLimits");
         await checkAndFetchAllTokenLimits(true);
@@ -367,11 +391,20 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
       for (const selection_model of MODEL_SELECTION_MODELS) {
       // Check if user has sufficient tokens for this selection model call
       const modelTokens = tokenChecker(selection_model, userCurrentTokens, selectionCheckTokens);
+      const mapping = MODEL_EXECUTION_MAP[selection_model];
+      const provider = (mapping?.provider || modelTokens.model?.provider || "").toLowerCase();
+      const executeModelName = mapping?.actualModel || selection_model;
 
-      if (modelTokens.has_sufficient_tokens && modelTokens.model) {
-        const mapping = MODEL_EXECUTION_MAP[selection_model];
-        const provider = (mapping?.provider || modelTokens.model.provider || "").toLowerCase();
-        const executeModelName = mapping?.actualModel || selection_model;
+      // Allow if model tokens sufficient or provider has remaining capacity
+      const providerHasTokens = provider === "gemini"
+        ? (user.dailyGeminiTokenCapacity || 10000) - (user.dailyGeminiTokenUsed || 0) >= selectionCheckTokens
+        : provider === "openrouter"
+        ? (user.dailyOpenRouterTokenCapacity || 5000) - (user.dailyOpenRouterTokenUsed || 0) >= selectionCheckTokens
+        : provider === "groq"
+        ? (user.dailyGroqTokenCapacity || 10000) - (user.dailyGroqTokenUsed || 0) >= selectionCheckTokens
+        : true;
+
+      if ((modelTokens.has_sufficient_tokens && modelTokens.model) || providerHasTokens) {
 
         try {
           const result = await executeWithModelQueue({
@@ -474,12 +507,15 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
     if (!selectedModels || !Array.isArray(selectedModels) || selectedModels.length === 0) {
       console.log("[modelSelector] Falling back to default candidates from available models.");
       selectedModels = [
-        { model: "openai/gpt-oss-120b", provider: "groq" },
-        { model: "gemini-3.8-flash", provider: "gemini" },
-        { model: "qwen/qwen3.8-27b", provider: "groq" },
         { model: "gemini-3.5-flash-lite", provider: "gemini" },
+        { model: "gemini-3.5-flash", provider: "gemini" },
+        { model: "inclusionai/ling-3.0-flash-sante:free", provider: "openrouter" },
+        { model: "nvidia/nemotron-3.5-lightning:free", provider: "openrouter" },
+        { model: "openai/gpt-oss-120b", provider: "groq" },
+        { model: "google/gemma-4-26b-a4b-it:free", provider: "openrouter" },
+        { model: "cohere/north-mini-code:free", provider: "openrouter" },
         { model: "gemini-flash-latest", provider: "gemini" },
-        { model: "nvidia/nemotron-3-ultra-550b-a55b:free", provider: "openrouter" },
+        { model: "meta-llama/llama-4-scout-17b-16k", provider: "groq" },
       ];
     }
 
