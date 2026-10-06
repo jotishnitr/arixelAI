@@ -62,6 +62,11 @@ export default function Profile({ setCurrentState }) {
     useEffect(() => {
         fetchProfile();
         fetchTokenStats();
+        const handleTokensUpdated = () => {
+            fetchTokenStats();
+        };
+        window.addEventListener("tokensUpdated", handleTokensUpdated);
+        return () => window.removeEventListener("tokensUpdated", handleTokensUpdated);
     }, []);
 
     useEffect(() => {
@@ -281,6 +286,9 @@ export default function Profile({ setCurrentState }) {
                                     <span className="tokens-rem-num">
                                         <strong>{tokenStats.summary.remainingDailyTokens?.toLocaleString()}</strong> remaining
                                     </span>
+                                    <span className="tokens-used-num">
+                                        <strong>{tokenStats.summary.dailyTokensUsed?.toLocaleString() || 0}</strong> used today
+                                    </span>
                                     <span className="tokens-total-num">
                                         of {tokenStats.summary.totalDailyCapacity?.toLocaleString()} daily
                                     </span>
@@ -291,25 +299,39 @@ export default function Profile({ setCurrentState }) {
                                         <div className="provider-stat-card">
                                             <span className="provider-name">Gemini</span>
                                             <span className="provider-remaining">
-                                                {tokenStats.providers.gemini.remaining.toLocaleString()} left
+                                                {(tokenStats.providers.gemini?.remaining ?? 0).toLocaleString()} left
+                                            </span>
+                                            <span className="provider-sub-used">
+                                                Used: {(tokenStats.providers.gemini?.dailyUsed ?? 0).toLocaleString()}
                                             </span>
                                         </div>
                                         <div className="provider-stat-card">
                                             <span className="provider-name">Groq</span>
                                             <span className="provider-remaining">
-                                                {tokenStats.providers.groq.remaining.toLocaleString()} left
+                                                {(tokenStats.providers.groq?.remaining ?? 0).toLocaleString()} left
+                                            </span>
+                                            <span className="provider-sub-used">
+                                                Used: {(tokenStats.providers.groq?.dailyUsed ?? 0).toLocaleString()}
                                             </span>
                                         </div>
-                                        <div className="provider-stat-card">
-                                            <span className="provider-name">Cerebras</span>
-                                            <span className="provider-remaining">
-                                                {tokenStats.providers.cerebras.remaining.toLocaleString()} left
-                                            </span>
-                                        </div>
+                                        {tokenStats.providers.cerebras && tokenStats.providers.cerebras.dailyCapacity > 0 && (
+                                            <div className="provider-stat-card">
+                                                <span className="provider-name">Cerebras</span>
+                                                <span className="provider-remaining">
+                                                    {(tokenStats.providers.cerebras.remaining ?? 0).toLocaleString()} left
+                                                </span>
+                                                <span className="provider-sub-used">
+                                                    Used: {(tokenStats.providers.cerebras?.dailyUsed ?? 0).toLocaleString()}
+                                                </span>
+                                            </div>
+                                        )}
                                         <div className="provider-stat-card">
                                             <span className="provider-name">OpenRouter</span>
                                             <span className="provider-remaining">
-                                                {tokenStats.providers.openrouter.remaining.toLocaleString()} left
+                                                {(tokenStats.providers.openrouter?.remaining ?? 0).toLocaleString()} left
+                                            </span>
+                                            <span className="provider-sub-used">
+                                                Used: {(tokenStats.providers.openrouter?.dailyUsed ?? 0).toLocaleString()}
                                             </span>
                                         </div>
                                     </div>

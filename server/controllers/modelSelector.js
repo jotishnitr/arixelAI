@@ -282,6 +282,30 @@ const postChat = async (req, res, next) => {
       rpd: model.rpd || 0,
     }));
 
+    const openRouterTokens = (user.openRouterModels || []).map((model) => ({
+      model: model.model,
+      provider: "openrouter",
+      dailyTokenCapacity: model.dailyTokenCapacity || 0,
+      dailyTokensUsed: model.dailyTokensUsed || 0,
+      providerRemainingTokens: Math.max(0, (model.dailyTokenCapacity || 0) - (model.dailyTokensUsed || 0)),
+      totalTokensUsed: model.totalTokensUsed || 0,
+      rpm: model.rpm || 0,
+      tpm: model.tpm || 0,
+      rpd: model.rpd || 0,
+    }));
+
+    const groqTokens = (user.groqModels || []).map((model) => ({
+      model: model.model,
+      provider: "groq",
+      dailyTokenCapacity: model.dailyTokenCapacity || 0,
+      dailyTokensUsed: model.dailyTokensUsed || 0,
+      providerRemainingTokens: Math.max(0, (model.dailyTokenCapacity || 0) - (model.dailyTokensUsed || 0)),
+      totalTokensUsed: model.totalTokensUsed || 0,
+      rpm: model.rpm || 0,
+      tpm: model.tpm || 0,
+      rpd: model.rpd || 0,
+    }));
+
     const userCurrentTokens = [...geminiTokens, ...openRouterTokens, ...groqTokens];
 
     // Compute task required tokens
@@ -400,7 +424,6 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
 
                 const providerFieldMap = {
                   gemini: "dailyGeminiTokenUsed",
-                  cerebras: "dailyCerebrasTokenUsed",
                   groq: "dailyGroqTokenUsed",
                   openrouter: "dailyOpenRouterTokenUsed",
                 };

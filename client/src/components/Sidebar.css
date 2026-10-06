@@ -283,6 +283,16 @@
   font-family: 'JetBrains Mono', monospace;
 }
 
+.tokens-badge-sub {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: #94A3B8;
+  margin-bottom: 6px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
 .tokens-badge-bar-bg {
   width: 100%;
   height: 4px;

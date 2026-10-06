@@ -10,22 +10,33 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [tokenStats, setTokenStats] = useState(null);
 
-  useEffect(() => {
-    const fetchTokens = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/getTokenStats`, {
-          credentials: "include",
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) setTokenStats(data);
-        }
-      } catch (err) {
-        console.warn("Could not fetch token stats in sidebar:", err.message);
+  const fetchTokens = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/getTokenStats`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) setTokenStats(data);
       }
-    };
+    } catch (err) {
+      console.warn("Could not fetch token stats in sidebar:", err.message);
+    }
+  };
+
+  useEffect(() => {
     fetchTokens();
   }, [contextHistory]);
+
+  useEffect(() => {
+    const handleTokensUpdated = () => {
+      fetchTokens();
+    };
+    window.addEventListener("tokensUpdated", handleTokensUpdated);
+    return () => {
+      window.removeEventListener("tokensUpdated", handleTokensUpdated);
+    };
+  }, []);
 
   useEffect(() => {
     const handleOutsideClick = () => {
@@ -168,7 +179,7 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
         {tokenStats?.summary && (
           <div
             className="sidebar-tokens-badge"
-            title={`Daily Capacity: ${tokenStats.summary.totalDailyCapacity?.toLocaleString()} tokens`}
+            title={`Daily Capacity: ${tokenStats.summary.totalDailyCapacity?.toLocaleString()} tokens | Used Today: ${tokenStats.summary.dailyTokensUsed?.toLocaleString() || 0} tokens`}
             onClick={() => { setCurrentState("profile"); setIsSidebarOpen(false); }}
           >
             <div className="tokens-badge-top">
@@ -176,6 +187,10 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
               <span className="tokens-badge-count">
                 {tokenStats.summary.remainingDailyTokens?.toLocaleString()}
               </span>
+            </div>
+            <div className="tokens-badge-sub">
+              <span>{tokenStats.summary.dailyTokensUsed?.toLocaleString() || 0} used</span>
+              <span>of {tokenStats.summary.totalDailyCapacity?.toLocaleString()}</span>
             </div>
             <div className="tokens-badge-bar-bg">
               <div

@@ -96,6 +96,12 @@ const getTokenStats = async (req, res) => {
           ),
           modelsCount: groqModels.length,
         },
+        cerebras: {
+          dailyCapacity: 0,
+          dailyUsed: 0,
+          remaining: 0,
+          modelsCount: 0,
+        },
         openrouter: {
           dailyCapacity: user.dailyOpenRouterTokenCapacity || 0,
           dailyUsed: user.dailyOpenRouterTokenUsed || 0,
@@ -108,7 +114,7 @@ const getTokenStats = async (req, res) => {
       },
       models: {
         gemini: geminiModels,
-        cerebras: cerebrasModels,
+        cerebras: [],
         groq: groqModels,
         openrouter: openRouterModels,
         all: allModels,

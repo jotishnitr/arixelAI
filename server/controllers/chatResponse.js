@@ -330,22 +330,26 @@ const handleChatResponse = async (req, res) => {
       });
     }
 
-    // Push the model's response
+    // Calculate estimated actual tokens for this exchange
+    const actualTokens =
+      successfulModel?.provider === "pollinations"
+        ? 0
+        : tokenCounter.estimateTokens(finalResponse) + tokenCounter.estimateTokens(enrichedPrompt);
+
+    // Push the model's response with token and model metadata
     chat.messages.push({
       role: "model",
       content: finalResponse,
+      tokensUsed: actualTokens,
+      modelUsed: successfulModel,
     });
     await chat.save();
 
     // 6. Update user's token usage in database
-    if (dbUserId && successfulModel) {
+    if (dbUserId && successfulModel && successfulModel.provider !== "pollinations" && actualTokens > 0) {
       try {
-        const actualTokens =
-          tokenCounter.estimateTokens(finalResponse) + tokenCounter.estimateTokens(enrichedPrompt);
-
         const providerFieldMap = {
           gemini: "dailyGeminiTokenUsed",
-          cerebras: "dailyCerebrasTokenUsed",
           groq: "dailyGroqTokenUsed",
           openrouter: "dailyOpenRouterTokenUsed",
         };
@@ -384,6 +388,7 @@ const handleChatResponse = async (req, res) => {
       message: "Chat response generated successfully",
       response: finalResponse,
       modelUsed: successfulModel,
+      tokensUsed: actualTokens,
       context: chat.context,
       messages: chat.messages,
     });

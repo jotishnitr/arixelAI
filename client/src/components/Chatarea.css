@@ -530,6 +530,38 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+.message-token-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 11px;
+    color: #94A3B8;
+}
+
+.meta-model-tag {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #CBD5E1;
+}
+
+.meta-tokens-tag {
+    background: rgba(139, 92, 246, 0.14);
+    border: 1px solid rgba(139, 92, 246, 0.28);
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #c4b5fd;
+    font-weight: 500;
+}
+
 .thinking-message {
     color: #CBC3D7;
     font-size: 15px;

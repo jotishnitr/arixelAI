@@ -6,6 +6,11 @@ const ChatSchema = new mongoose.Schema({
     messages: [{
         role: { type: String },
         content: { type: String },
+        tokensUsed: { type: Number },
+        modelUsed: {
+            model: { type: String },
+            provider: { type: String }
+        },
         attachment: {
             name: { type: String },
             mimeType: { type: String },

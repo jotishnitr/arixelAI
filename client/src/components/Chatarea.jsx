@@ -386,6 +386,8 @@ export default function Chatarea({
             {
               role: "model",
               content: data.response,
+              tokensUsed: data.tokensUsed,
+              modelUsed: data.modelUsed,
             },
           ]);
         } else {
@@ -395,6 +397,8 @@ export default function Chatarea({
           getContextHistory();
         }
         setCurrentContext("old");
+        // Notify components (Sidebar, Profile) to update token counters
+        window.dispatchEvent(new CustomEvent("tokensUpdated"));
       } else {
         setChatHistory((prev) => [
           ...prev.slice(0, -1),
@@ -647,6 +651,28 @@ export default function Chatarea({
                       </Markdown>
                     )}
                   </div>
+                  {msg.role === "model" &&
+                    msg.content !== "Generating response..." &&
+                    (msg.tokensUsed || msg.modelUsed) && (
+                      <div className="message-token-meta">
+                        {msg.modelUsed?.model && (
+                          <span
+                            className="meta-model-tag"
+                            title={`Provider: ${msg.modelUsed.provider || "AI"}`}
+                          >
+                            {msg.modelUsed.model}
+                          </span>
+                        )}
+                        {msg.tokensUsed > 0 && (
+                          <span
+                            className="meta-tokens-tag"
+                            title="Tokens consumed by this request"
+                          >
+                            ⚡ {msg.tokensUsed.toLocaleString()} tokens
+                          </span>
+                        )}
+                      </div>
+                    )}
                 </div>
               </div>
             ))}

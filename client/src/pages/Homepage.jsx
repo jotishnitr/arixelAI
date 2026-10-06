@@ -2,6 +2,7 @@ import Sidebar from "../components/Sidebar";
 import Chatarea from "../components/Chatarea";
 import Profile from "./ProfileModal";
 import { useState, useEffect } from "react";
+import { API_BASE_URL } from "../config";
 export default function Homepage() {
   const [context, setContext] = useState("");
   const [currentState, setCurrentState] = useState("hero");
@@ -12,7 +13,7 @@ export default function Homepage() {
   const getContextHistory = async () => {
     try {
       const response = await fetch(
-        "https://arixelai.onrender.com/api/getChatContextHistory",
+        `${API_BASE_URL}/api/getChatContextHistory`,
         {
           method: "GET",
           credentials: "include",

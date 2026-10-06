@@ -428,6 +428,16 @@
     font-weight: 600;
 }
 
+.tokens-used-num {
+    color: #a078ff;
+    font-weight: 500;
+}
+
+.tokens-used-num strong {
+    color: #c4b5fd;
+    font-weight: 700;
+}
+
 .tokens-total-num {
     opacity: 0.8;
 }
@@ -459,6 +469,12 @@
     font-size: 12px;
     font-weight: 600;
     color: #E2E8F0;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.provider-sub-used {
+    font-size: 10px;
+    color: #94A3B8;
     font-family: 'JetBrains Mono', monospace;
 }
 
