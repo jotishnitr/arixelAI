@@ -356,8 +356,11 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
       /^\s*(picture|photo|image|drawing|illustration)\s+of\b/i.test(enrichedText || text || "");
 
     if (isImageIntent) {
-      selectedModels = [{ model: "flux", provider: "pollinations" }];
-      console.log("[modelSelector] Image generation intent detected. Direct routing to pollinations [flux].");
+      selectedModels = [
+        { model: "stable-diffusion-xl-base-v10", provider: "sdxl" },
+        { model: "flux", provider: "pollinations" },
+      ];
+      console.log("[modelSelector] Image generation intent detected. Direct routing to free image models [SDXL, Pollinations].");
     }
 
     if (!selectedModels) {

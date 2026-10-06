@@ -253,11 +253,40 @@ const handleChatResponse = async (req, res) => {
               return result?.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
             }
 
+            if (provider === "sdxl" || provider === "ovh") {
+              const cleanPrompt = (promptText || "")
+                .replace(/^(generate|create|draw|make|render)\s+(an?\s+)?(image|picture|photo|illustration|drawing|portrait|wallpaper)\s+(of\s+|containing\s+)?/i, "")
+                .trim() || promptText;
+
+              const res = await fetch("https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/images/generations", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  model: "stable-diffusion-xl-base-v10",
+                  prompt: cleanPrompt,
+                  n: 1,
+                  size: "1024x1024",
+                }),
+              });
+
+              if (res.ok) {
+                const data = await res.json();
+                const b64 = data.data?.[0]?.b64_json;
+                if (b64) {
+                  return `data:image/png;base64,${b64}`;
+                }
+                const url = data.data?.[0]?.url;
+                if (url) return url;
+              }
+              throw new Error(`SDXL generation failed with status ${res.status}`);
+            }
+
             if (provider === "pollinations") {
-              const cleanPrompt = (promptText || "").replace(/^(generate|create|draw|make)\s+(an?\s+)?(image|picture|photo|illustration|drawing)\s+(of\s+)?/i, "").trim() || promptText;
+              const cleanPrompt = (promptText || "")
+                .replace(/^(generate|create|draw|make|render)\s+(an?\s+)?(image|picture|photo|illustration|drawing|portrait|wallpaper)\s+(of\s+|containing\s+)?/i, "")
+                .trim() || promptText;
               const encoded = encodeURIComponent(cleanPrompt);
-              const selectedModel = modelId && modelId !== "pollinations" ? modelId : "flux";
-              return `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&model=${selectedModel}&nologo=true`;
+              return `https://image.pollinations.ai/prompt/${encoded}`;
             }
 
             if (provider === "groq") {
@@ -330,11 +359,15 @@ const handleChatResponse = async (req, res) => {
       });
     }
 
+    const isImageProvider =
+      successfulModel?.provider === "pollinations" ||
+      successfulModel?.provider === "sdxl" ||
+      successfulModel?.provider === "ovh";
+
     // Calculate estimated actual tokens for this exchange
-    const actualTokens =
-      successfulModel?.provider === "pollinations"
-        ? 0
-        : tokenCounter.estimateTokens(finalResponse) + tokenCounter.estimateTokens(enrichedPrompt);
+    const actualTokens = isImageProvider
+      ? 0
+      : tokenCounter.estimateTokens(finalResponse) + tokenCounter.estimateTokens(enrichedPrompt);
 
     // Push the model's response with token and model metadata
     chat.messages.push({
@@ -346,7 +379,7 @@ const handleChatResponse = async (req, res) => {
     await chat.save();
 
     // 6. Update user's token usage in database
-    if (dbUserId && successfulModel && successfulModel.provider !== "pollinations" && actualTokens > 0) {
+    if (dbUserId && successfulModel && !isImageProvider && actualTokens > 0) {
       try {
         const providerFieldMap = {
           gemini: "dailyGeminiTokenUsed",
