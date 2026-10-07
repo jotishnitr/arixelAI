@@ -38,8 +38,9 @@ app.use(
 
 const { initTokenLimitsCron } = require("./utils/gettingTokenLimits.js");
 
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
+// Increase body parser limits for file attachments (PDFs, docs, images)
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ limit: "100mb", extended: true }));
 app.use(cookieParser());
 connectDB();
 initTokenLimitsCron();

@@ -773,7 +773,8 @@ export default function Chatarea({
                   {msg.attachment && (
                     <div className="chat-attachment-preview">
                       {msg.attachment.mimeType &&
-                        msg.attachment.mimeType.startsWith("image/") ? (
+                        msg.attachment.mimeType.startsWith("image/") &&
+                        msg.attachment.base64 ? (
                         <img
                           src={`data:${msg.attachment.mimeType};base64,${msg.attachment.base64}`}
                           alt={msg.attachment.name}
@@ -781,7 +782,9 @@ export default function Chatarea({
                         />
                       ) : (
                         <div className="chat-attached-file">
-                          <span className="file-icon">📄</span>
+                          <span className="file-icon">
+                            {msg.attachment?.mimeType?.startsWith("image/") ? "🖼️" : "📄"}
+                          </span>
                           <span className="file-name">
                             {msg.attachment.name}
                           </span>

@@ -6,7 +6,7 @@ const openrouter = require("../utils/openRouter");
 const { getRepoCodeContext } = require("../utils/githubRepoHelper");
 const { executeWithModelQueue } = require("../utils/modelQueue");
 const tokenCounter = require("../utils/tokenCounter");
-const { extractAttachmentText } = require("../utils/attachmentHelper");
+const { extractAttachmentText, sanitizeAttachmentForDb } = require("../utils/attachmentHelper");
 
 const SYSTEM_PROMPT = `You are ArixelCore-1o, the flagship AI model developed by ArixelAI, founded by Jotish Kumar.
 
@@ -381,18 +381,11 @@ const handleChatResponse = async (req, res) => {
     // Ensure the user message is in chat history
     const lastMsg = chat.messages[chat.messages.length - 1];
     if (!lastMsg || lastMsg.role !== "user" || lastMsg.content !== promptText) {
+      const dbAttachment = sanitizeAttachmentForDb(attachment);
       chat.messages.push({
         role: "user",
         content: promptText,
-        ...(attachment
-          ? {
-              attachment: {
-                name: attachment.name,
-                mimeType: attachment.mimeType,
-                base64: attachment.base64,
-              },
-            }
-          : {}),
+        ...(dbAttachment ? { attachment: dbAttachment } : {}),
       });
     }
 

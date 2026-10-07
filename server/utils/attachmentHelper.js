@@ -88,6 +88,35 @@ async function extractAttachmentText(attachment) {
   return "";
 }
 
+/**
+ * Sanitizes an attachment before storing it in MongoDB.
+ * MongoDB enforces a strict 16MB document limit (16,793,600 bytes) across the entire Chat document.
+ *
+ * - Non-images (PDF, Word, Code, Text): NEVER store the base64 string in DB.
+ *   The extracted content has already been injected into the conversation prompt,
+ *   and the frontend UI only needs the filename and file icon.
+ * - Images (image/*): Only preserve base64 if small (< 500KB) for rendering previews
+ *   in chat history. If larger, omit base64 so documents never exceed the 16MB ceiling.
+ *
+ * @param {Object} attachment - { name, mimeType, base64 }
+ * @returns {Object|undefined} - Sanitized attachment object for MongoDB
+ */
+function sanitizeAttachmentForDb(attachment) {
+  if (!attachment) return undefined;
+
+  const mime = (attachment.mimeType || "").toLowerCase();
+  const isImage = mime.startsWith("image/");
+  // 500 KB limit for inline base64 stored in MongoDB
+  const isSmallImage = isImage && attachment.base64 && attachment.base64.length < 500000;
+
+  return {
+    name: attachment.name || "Attachment",
+    mimeType: attachment.mimeType || (isImage ? "image/png" : "application/octet-stream"),
+    ...(isSmallImage ? { base64: attachment.base64 } : {}),
+  };
+}
+
 module.exports = {
   extractAttachmentText,
+  sanitizeAttachmentForDb,
 };

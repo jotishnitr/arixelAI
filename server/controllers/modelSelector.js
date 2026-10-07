@@ -8,7 +8,7 @@ const gemini = require("../utils/geminiClient");
 const openrouter = require("../utils/openRouter");
 const groq = require("../utils/groqClient");
 const { executeWithModelQueue } = require("../utils/modelQueue");
-const { extractAttachmentText } = require("../utils/attachmentHelper");
+const { extractAttachmentText, sanitizeAttachmentForDb } = require("../utils/attachmentHelper");
 
 const Model_selection_prompt = `You are Arixel AI's Model Selection Engine.
 
@@ -423,10 +423,12 @@ const postChat = async (req, res, next) => {
     }
 
     // Append and save incoming user message to chat history
+    // Sanitize attachment to avoid exceeding MongoDB's 16MB document size limit (BSONObj size error)
+    const dbAttachment = sanitizeAttachmentForDb(attachment);
     const userMessage = {
       role: "user",
       content: text || "",
-      ...(attachment ? { attachment } : {}),
+      ...(dbAttachment ? { attachment: dbAttachment } : {}),
     };
     chat.messages.push(userMessage);
     await chat.save();
