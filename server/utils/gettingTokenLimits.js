@@ -241,7 +241,7 @@ async function fetchOpenRouterTokens() {
                         m.id.includes("decision") ||
                         m.id.includes("embed") ||
                         m.id.includes("rerank") ||
-                        m.id.includes("audio") ||
+                        (m.id.includes("audio") && !m.id.includes("fish-audio")) ||
                         m.id.includes("content-safety") ||
                         m.id.startsWith("respan/") ||
                         m.id.startsWith("inception/")

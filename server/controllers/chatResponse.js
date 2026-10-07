@@ -281,6 +281,35 @@ const handleChatResponse = async (req, res) => {
             }
 
             if (provider === "openrouter") {
+              if (modelId === "fish-audio/s2.1-pro-free:free" || modelId.includes("fish-audio")) {
+                const cleanInput = (promptText || "")
+                  .replace(/^(generate|create|synthesize|make|produce)\s+(an?\s+)?(audio|speech|voice|sound)\s+(of\s+|saying\s+|reading\s+)?/i, "")
+                  .replace(/^(speak|read\s+out\s+loud|text\s+to\s+speech)\s*:\s*/i, "")
+                  .trim() || promptText;
+
+                console.log(`[chatResponse] Calling OpenRouter TTS endpoint with model [${modelId}]...`);
+                const ttsRes = await fetch("https://openrouter.ai/api/v1/audio/speech", {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: modelId,
+                    input: cleanInput,
+                  }),
+                });
+
+                if (!ttsRes.ok) {
+                  const errText = await ttsRes.text();
+                  throw new Error(`OpenRouter audio/speech failed (${ttsRes.status}): ${errText}`);
+                }
+
+                const arrayBuffer = await ttsRes.arrayBuffer();
+                const base64Audio = Buffer.from(arrayBuffer).toString("base64");
+                return `data:audio/mp3;base64,${base64Audio}`;
+              }
+
               const completion = await openrouter.chat.completions.create({
                 model: modelId,
                 messages: openAiMessages,
@@ -389,13 +418,14 @@ const handleChatResponse = async (req, res) => {
       });
     }
 
-    const isImageProvider =
+    const isMediaProvider =
       successfulModel?.provider === "pollinations" ||
       successfulModel?.provider === "sdxl" ||
-      successfulModel?.provider === "ovh";
+      successfulModel?.provider === "ovh" ||
+      Boolean(successfulModel?.model && (successfulModel.model.includes("fish-audio") || successfulModel.model.includes("tts")));
 
     // Calculate estimated actual tokens for this exchange
-    const actualTokens = isImageProvider
+    const actualTokens = isMediaProvider
       ? 0
       : tokenCounter.estimateTokens(finalResponse) + tokenCounter.estimateTokens(enrichedPrompt);
 
@@ -419,7 +449,7 @@ const handleChatResponse = async (req, res) => {
     await chat.save();
 
     // 6. Update user's token usage in database
-    if (dbUserId && successfulModel && !isImageProvider && actualTokens > 0) {
+    if (dbUserId && successfulModel && !isMediaProvider && actualTokens > 0) {
       try {
         const providerFieldMap = {
           gemini: "dailyGeminiTokenUsed",

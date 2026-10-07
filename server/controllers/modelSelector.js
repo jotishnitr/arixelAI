@@ -79,7 +79,10 @@ MODEL SELECTION
    - Actively diversify the selected candidates across multiple providers (Gemini, Groq, and include at least 2 to 3 OpenRouter models).
    - Do NOT select only a single provider. Provide cross-provider redundancy so if one provider hits rate limits (429) or timeouts (503), the next provider can take over immediately.
 
-10. Token availability is a HARD constraint, not a preference.
+10. AUDIO & TEXT-TO-SPEECH (TTS):
+   - For audio generation, voice synthesis, speaking, or text-to-speech requests (e.g., "speak this", "read out loud", "generate audio", "synthesize voice"), prioritize audio/TTS models such as OpenRouter's "fish-audio/s2.1-pro-free:free" or Gemini TTS models.
+
+11. Token availability is a HARD constraint, not a preference.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FALLBACK
@@ -218,6 +221,11 @@ function heuristicModelSelection(promptText, userCurrentTokens, requiredTokens, 
     /^\s*(generate|create|draw|make|render)\s+(an?\s+)?(image|picture|photo|illustration|drawing|portrait|wallpaper)\b/i.test(text) ||
     /^\s*(picture|photo|image|drawing|illustration)\s+of\b/i.test(text);
 
+  const isAudio =
+    /^\s*(generate|create|synthesize|make|produce)\s+(an?\s+)?(audio|speech|voice|tts|sound|podcast)\b/i.test(text) ||
+    /^\s*(speak|read\s+out\s+loud|text\s+to\s+speech)\b/i.test(text) ||
+    /\b(text\s+to\s+speech|voiceover|voice\s+synthesis|speech\s+synthesis)\b/i.test(text);
+
   const isCoding =
     Boolean(repo) ||
     /```[\s\S]*```/.test(promptText || "") ||
@@ -233,6 +241,8 @@ function heuristicModelSelection(promptText, userCurrentTokens, requiredTokens, 
 
   if (isImage) {
     category = "image";
+  } else if (isAudio) {
+    category = "tts";
   } else if (isCoding) {
     category = "coding";
   } else if (isResearch) {
@@ -273,6 +283,14 @@ function heuristicModelSelection(promptText, userCurrentTokens, requiredTokens, 
       { model: "flux", provider: "pollinations" },
       { model: "flux-realism", provider: "pollinations" },
       { model: "turbo", provider: "pollinations" },
+    ];
+  }
+
+  // Immediate handling for audio / text-to-speech generation
+  if (category === "tts") {
+    return [
+      { model: "fish-audio/s2.1-pro-free:free", provider: "openrouter" },
+      { model: "gemini-3.1-flash-tts-preview", provider: "gemini" },
     ];
   }
 
@@ -534,6 +552,20 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
         { model: "flux", provider: "pollinations" },
       ];
       console.log("[modelSelector] Image generation intent detected. Direct routing to free image models [SDXL, Pollinations].");
+    }
+
+    // Fast path: If prompt is clearly requesting audio, speech, or TTS, route directly to Fish Audio
+    const isAudioIntent =
+      /^\s*(generate|create|synthesize|make|produce)\s+(an?\s+)?(audio|speech|voice|tts|sound|podcast)\b/i.test(enrichedText || text || "") ||
+      /^\s*(speak|read\s+out\s+loud|text\s+to\s+speech)\b/i.test(enrichedText || text || "") ||
+      /\b(text\s+to\s+speech|voiceover|voice\s+synthesis|speech\s+synthesis)\b/i.test(enrichedText || text || "");
+
+    if (isAudioIntent && !selectedModels) {
+      selectedModels = [
+        { model: "fish-audio/s2.1-pro-free:free", provider: "openrouter" },
+        { model: "gemini-3.1-flash-tts-preview", provider: "gemini" },
+      ];
+      console.log("[modelSelector] Audio/TTS intent detected. Direct routing to [fish-audio/s2.1-pro-free:free].");
     }
 
     if (!selectedModels) {

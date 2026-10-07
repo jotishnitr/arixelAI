@@ -336,6 +336,12 @@ const TASK_COMPLETION_MODELS = {
 
   audio_music: [
     {
+      provider: "openrouter",
+      model: "fish-audio/s2.1-pro-free:free",
+      displayName: "Fish Audio S2.1 Pro",
+      bestFunction: "High-quality text-to-speech and audio synthesis."
+    },
+    {
       provider: "gemini",
       model: "lyria-3-clip-preview",
       displayName: "Lyria 3 Clip Preview",
@@ -356,6 +362,12 @@ const TASK_COMPLETION_MODELS = {
   ],
 
   tts: [
+    {
+      provider: "openrouter",
+      model: "fish-audio/s2.1-pro-free:free",
+      displayName: "Fish Audio S2.1 Pro",
+      bestFunction: "Text-to-speech voice synthesis and speech generation."
+    },
     {
       provider: "gemini",
       model: "gemini-3.1-flash-tts-preview",
