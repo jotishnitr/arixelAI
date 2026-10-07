@@ -73,7 +73,10 @@ MODEL SELECTION
 
 8. Prefer stronger models for complex reasoning, coding, research, and difficult tasks.
 
-9. Do not select multiple models unless multiple models are genuinely useful.
+9. CHAIN SIZE & MULTI-PROVIDER DIVERSITY:
+   - Select AT LEAST 7 to 8 eligible models in the returned array to construct a resilient fallback chain.
+   - Actively diversify the selected candidates across multiple providers (Gemini, Groq, and include at least 2 to 3 OpenRouter models).
+   - Do NOT select only a single provider. Provide cross-provider redundancy so if one provider hits rate limits (429) or timeouts (503), the next provider can take over immediately.
 
 10. Token availability is a HARD constraint, not a preference.
 
@@ -83,10 +86,9 @@ FALLBACK
 
 If no suitable specialized model has enough tokens:
 
-1. Find a familiar general-purpose model in AVAILABLE_MODELS.
-2. Verify that its provider has at least REQUIRED_TOKENS remaining.
-3. Select it as the LAST-RESORT fallback.
-4. The fallback MUST appear at the END of the returned array.
+1. Find familiar general-purpose models in AVAILABLE_MODELS across Gemini, Groq, and OpenRouter.
+2. Verify that their providers have at least REQUIRED_TOKENS remaining.
+3. Select them as fallbacks at the END of the returned array.
 
 The fallback must never be preferred over a suitable task-specific model.
 
@@ -97,15 +99,14 @@ Return:
 []
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PRIORITY
+PRIORITY & ORDERING
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Return models in this order:
+Return a diversified chain of at least 7-8 models in this order:
 
-1. Best task-specific model
-2. Other suitable task-specific models
-3. Suitable alternative models
-4. General-purpose fallback
+1. Top 1-2 best task-specific models (primary models matching the prompt category)
+2. 2-3 strong alternative models from different providers (including 2-3 OpenRouter models for diversity)
+3. 2-3 fast general-purpose fallback models at the end of the chain
 
 Every returned model must satisfy:
 
