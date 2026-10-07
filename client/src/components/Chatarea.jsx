@@ -800,77 +800,88 @@ export default function Chatarea({
                         : ""
                     }
                   >
-                    {msg.content && (
-                      /^data:image\/[a-zA-Z0-9+]+;base64,/i.test(msg.content.trim()) ||
-                      /^https?:\/\/[^\s]+$/i.test(msg.content.trim())
-                    ) ? (
-                      <div className="chat-image-response">
-                        <img
-                          src={msg.content.trim()}
-                          alt="AI Generated"
-                          className="chat-generated-image"
-                          loading="lazy"
-                        />
-                        <div className="chat-image-actions">
-                          <a
-                            href={msg.content.trim()}
-                            download="ai-generated-image.png"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="download-image-btn"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                              <polyline points="7 10 12 15 17 10"></polyline>
-                              <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                            Download Image
-                          </a>
-                        </div>
-                      </div>
-                    ) : msg.content && /^data:audio\/[a-zA-Z0-9+]+;base64,/i.test(msg.content.trim()) ? (
-                      <div className="chat-audio-response">
-                        <div className="audio-card">
-                          <div className="audio-card-header">
-                            <span className="audio-card-icon">🎙️</span>
-                            <div className="audio-card-meta">
-                              <span className="audio-card-title">Generated Audio</span>
-                              <span className="audio-card-subtitle">Fish Audio S2.1 Pro</span>
+                    {(() => {
+                      const contentStr = (msg.content || "").trim().replace(/^[`'"]+|[`'"]+$/g, "");
+                      const isAudio = /^data:audio\//i.test(contentStr) || /^https?:\/\/.*\.(mp3|wav|ogg|m4a)(\?.*)?$/i.test(contentStr);
+                      const isImage = /^data:image\//i.test(contentStr) || (/^https?:\/\/[^\s]+$/i.test(contentStr) && !isAudio);
+
+                      if (isAudio) {
+                        return (
+                          <div className="chat-audio-response">
+                            <div className="audio-card">
+                              <div className="audio-card-header">
+                                <span className="audio-card-icon">🎙️</span>
+                                <div className="audio-card-meta">
+                                  <span className="audio-card-title">Generated Audio</span>
+                                  <span className="audio-card-subtitle">Fish Audio S2.1 Pro</span>
+                                </div>
+                              </div>
+                              <audio
+                                controls
+                                src={contentStr}
+                                className="chat-audio-player"
+                              >
+                                Your browser does not support audio playback.
+                              </audio>
+                              <div className="chat-audio-actions">
+                                <a
+                                  href={contentStr}
+                                  download="ai-generated-audio.mp3"
+                                  className="download-audio-btn"
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                  </svg>
+                                  Download Audio (.mp3)
+                                </a>
+                              </div>
                             </div>
                           </div>
-                          <audio
-                            controls
-                            src={msg.content.trim()}
-                            className="chat-audio-player"
-                          >
-                            Your browser does not support audio playback.
-                          </audio>
-                          <div className="chat-audio-actions">
-                            <a
-                              href={msg.content.trim()}
-                              download="ai-generated-audio.mp3"
-                              className="download-audio-btn"
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                              </svg>
-                              Download Audio (.mp3)
-                            </a>
+                        );
+                      }
+
+                      if (isImage) {
+                        return (
+                          <div className="chat-image-response">
+                            <img
+                              src={contentStr}
+                              alt="AI Generated"
+                              className="chat-generated-image"
+                              loading="lazy"
+                            />
+                            <div className="chat-image-actions">
+                              <a
+                                href={contentStr}
+                                download="ai-generated-image.png"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="download-image-btn"
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                  <polyline points="7 10 12 15 17 10"></polyline>
+                                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                Download Image
+                              </a>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <Markdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          pre: CodeBlock,
-                        }}
-                      >
-                        {msg.content || ""}
-                      </Markdown>
-                    )}
+                        );
+                      }
+
+                      return (
+                        <Markdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            pre: CodeBlock,
+                          }}
+                        >
+                          {msg.content || ""}
+                        </Markdown>
+                      );
+                    })()}
                   </div>
                   {msg.role === "model" &&
                     msg.content !== "Generating response..." && (
