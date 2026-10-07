@@ -6,43 +6,7 @@ const openrouter = require("../utils/openRouter");
 const { getRepoCodeContext } = require("../utils/githubRepoHelper");
 const { executeWithModelQueue } = require("../utils/modelQueue");
 const tokenCounter = require("../utils/tokenCounter");
-const pdfParse = require("pdf-parse");
-const mammoth = require("mammoth");
-
-/**
- * Extracts raw text from an attachment (PDF, Word, or plain text).
- */
-async function extractAttachmentText(attachment) {
-  if (!attachment || !attachment.base64) return "";
-
-  const mime = (attachment.mimeType || "").toLowerCase();
-
-  try {
-    const buffer = Buffer.from(attachment.base64, "base64");
-
-    if (mime === "application/pdf") {
-      const pdfData = await pdfParse(buffer);
-      return pdfData.text || "";
-    }
-
-    if (
-      mime.includes("wordprocessingml") ||
-      mime.includes("docx") ||
-      (attachment.name && attachment.name.endsWith(".docx"))
-    ) {
-      const docResult = await mammoth.extractRawText({ buffer });
-      return docResult.value || "";
-    }
-
-    if (mime.startsWith("text/") || mime.includes("json") || mime.includes("javascript")) {
-      return buffer.toString("utf-8");
-    }
-  } catch (err) {
-    console.warn(`[chatResponse] Failed to parse attachment (${attachment.name || "file"}):`, err.message);
-  }
-
-  return "";
-}
+const { extractAttachmentText } = require("../utils/attachmentHelper");
 
 const SYSTEM_PROMPT = `You are ArixelCore-1o, the flagship AI model developed by ArixelAI, founded by Jotish Kumar.
 
@@ -83,7 +47,7 @@ function buildOpenAiMessages(historyMessages, currentPrompt) {
 /**
  * Formats chat history and current user message for Gemini SDK (@google/genai).
  */
-function buildGeminiContents(historyMessages, currentPrompt, attachment) {
+function buildGeminiContents(historyMessages, currentPrompt, attachment, docText) {
   const contents = (historyMessages || []).map((msg) => ({
     role: msg.role === "model" ? "model" : "user",
     parts: [{ text: msg.content || "" }],
@@ -91,19 +55,30 @@ function buildGeminiContents(historyMessages, currentPrompt, attachment) {
 
   const currentParts = [{ text: currentPrompt }];
 
-  // If an image is attached, pass as inlineData for Gemini
+  // If an image or scanned PDF without text is attached, pass as inlineData for Gemini
   if (
     attachment &&
     attachment.base64 &&
-    attachment.mimeType &&
-    attachment.mimeType.startsWith("image/")
+    attachment.mimeType
   ) {
-    currentParts.push({
-      inlineData: {
-        mimeType: attachment.mimeType,
-        data: attachment.base64.replace(/^data:[^;]+;base64,/, ""),
-      },
-    });
+    const mime = (attachment.mimeType || "").toLowerCase();
+    const cleanB64 = attachment.base64.replace(/^data:[^;]+;base64,/, "");
+
+    if (mime.startsWith("image/")) {
+      currentParts.push({
+        inlineData: {
+          mimeType: attachment.mimeType,
+          data: cleanB64,
+        },
+      });
+    } else if (mime.includes("pdf") && (!docText || docText.length < 50)) {
+      currentParts.push({
+        inlineData: {
+          mimeType: "application/pdf",
+          data: cleanB64,
+        },
+      });
+    }
   }
 
   const lastTurn = contents[contents.length - 1];
@@ -206,8 +181,9 @@ const handleChatResponse = async (req, res) => {
     }
 
     // 2. Process attached documents (PDF, Word, or plain text)
+    let docText = "";
     if (attachment) {
-      const docText = await extractAttachmentText(attachment);
+      docText = await extractAttachmentText(attachment);
       if (docText) {
         enrichedPrompt = `${enrichedPrompt}\n\n[Attached Document Content (${attachment.name || "File"})]:\n${docText}`;
       }
@@ -215,7 +191,7 @@ const handleChatResponse = async (req, res) => {
 
     // 3. Prepare payload messages for the providers
     const openAiMessages = buildOpenAiMessages(historyMessages, enrichedPrompt);
-    const geminiContents = buildGeminiContents(historyMessages, enrichedPrompt, attachment);
+    const geminiContents = buildGeminiContents(historyMessages, enrichedPrompt, attachment, docText);
 
     // Calculate required tokens for rate limiting (TPM)
     const estimatedTokens = tokenCounter.calculateRequiredTokens(enrichedPrompt, historyMessages, 1200);

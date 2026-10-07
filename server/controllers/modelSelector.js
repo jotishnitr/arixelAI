@@ -8,6 +8,7 @@ const gemini = require("../utils/geminiClient");
 const openrouter = require("../utils/openRouter");
 const groq = require("../utils/groqClient");
 const { executeWithModelQueue } = require("../utils/modelQueue");
+const { extractAttachmentText } = require("../utils/attachmentHelper");
 
 const Model_selection_prompt = `You are Arixel AI's Model Selection Engine.
 
@@ -201,6 +202,128 @@ function parseSelectionOutput(rawText) {
   return null;
 }
 
+/**
+ * Heuristic Selection Engine:
+ * Intelligently analyzes prompt intent, attached files, and repository context
+ * when all AI selection models fail or encounter rate limits.
+ * Builds a diversified 7-8 candidate chain across Gemini, Groq, and OpenRouter.
+ */
+function heuristicModelSelection(promptText, userCurrentTokens, requiredTokens, attachment, repo) {
+  const text = (promptText || "").toLowerCase();
+
+  // 1. Detect Category / Intent via heuristic pattern matching
+  let category = "general_text_reasoning";
+
+  const isImage =
+    /^\s*(generate|create|draw|make|render)\s+(an?\s+)?(image|picture|photo|illustration|drawing|portrait|wallpaper)\b/i.test(text) ||
+    /^\s*(picture|photo|image|drawing|illustration)\s+of\b/i.test(text);
+
+  const isCoding =
+    Boolean(repo) ||
+    /```[\s\S]*```/.test(promptText || "") ||
+    /\b(function|def|class|const|let|var|return|import|export|sql|query|select|insert|update|delete|table|database|schema|api|endpoint|route|bug|debug|error|exception|refactor|compile|syntax|react|vue|angular|node|python|java|c\+\+|golang|rust|typescript|javascript|html|css|docker|kubernetes|git|algorithm|leetcode)\b/i.test(text);
+
+  const isResearch =
+    Boolean(attachment) ||
+    text.length > 2500 ||
+    /\b(research|synthesize|analyze|analysis|compare and contrast|literature review|paper|methodology|thesis|citation|citations|deep dive|comprehensive report)\b/i.test(text);
+
+  const isAgentic =
+    /\b(step[- ]by[- ]step plan|roadmap|workflow|pipeline|automate|orchestrate|action plan|breakdown)\b/i.test(text);
+
+  if (isImage) {
+    category = "image";
+  } else if (isCoding) {
+    category = "coding";
+  } else if (isResearch) {
+    category = "research";
+  } else if (isAgentic) {
+    category = "agentic";
+  }
+
+  // 2. Build provider token eligibility lookup
+  const tokenMap = {};
+  for (const item of (userCurrentTokens || [])) {
+    const prov = (item.provider || "").toLowerCase();
+    tokenMap[prov] = item.providerRemainingTokens || 0;
+  }
+
+  const isEligible = (prov) => {
+    const p = (prov || "").toLowerCase();
+    if (tokenMap[p] === undefined) return true;
+    return tokenMap[p] >= (requiredTokens || 100);
+  };
+
+  const selected = [];
+  const addedKeys = new Set();
+
+  const addModel = (modelId, provider) => {
+    if (!modelId || !provider) return;
+    const key = `${provider}:${modelId}`.toLowerCase();
+    if (!addedKeys.has(key) && isEligible(provider)) {
+      addedKeys.add(key);
+      selected.push({ model: modelId, provider });
+    }
+  };
+
+  // Immediate handling for image generation
+  if (category === "image") {
+    return [
+      { model: "stable-diffusion-xl-base-v10", provider: "sdxl" },
+      { model: "flux", provider: "pollinations" },
+      { model: "flux-realism", provider: "pollinations" },
+      { model: "turbo", provider: "pollinations" },
+    ];
+  }
+
+  // 3. Step A: Pick top task-specific models from the detected category
+  const primaryModels = TASK_COMPLETION_MODELS[category] || [];
+
+  for (const m of primaryModels) {
+    if (m.provider === "gemini" || m.provider === "groq") {
+      addModel(m.model, m.provider);
+      if (selected.filter((x) => x.provider !== "openrouter").length >= 3) break;
+    }
+  }
+
+  // 4. Step B: Add 2-3 OpenRouter models for cross-provider diversity
+  const openRouterCategoryModels = primaryModels.filter((m) => m.provider === "openrouter");
+  for (const m of openRouterCategoryModels) {
+    addModel(m.model, m.provider);
+    if (selected.filter((x) => x.provider === "openrouter").length >= 3) break;
+  }
+
+  // Fill additional OpenRouter candidates from diversified general/coding pool if needed
+  const fallbackOpenRouterPool = [
+    { model: "inclusionai/ling-3.0-flash-sante:free", provider: "openrouter" },
+    { model: "nvidia/nemotron-3.5-lightning:free", provider: "openrouter" },
+    { model: "cohere/north-mini-code:free", provider: "openrouter" },
+    { model: "nvidia/nemotron-3-super-120b-a12b:free", provider: "openrouter" },
+    { model: "google/gemma-4-26b-a4b-it:free", provider: "openrouter" },
+    { model: "liquid/lfm-2.5-2.6b:free", provider: "openrouter" },
+  ];
+  for (const m of fallbackOpenRouterPool) {
+    if (selected.filter((x) => x.provider === "openrouter").length >= 3) break;
+    addModel(m.model, m.provider);
+  }
+
+  // 5. Step C: Pad chain with reliable general-purpose models up to 7-8 candidates
+  const generalFallbackPool = [
+    { model: "gemini-3.5-flash-lite", provider: "gemini" },
+    { model: "openai/gpt-oss-120b", provider: "groq" },
+    { model: "gemini-3.5-flash", provider: "gemini" },
+    { model: "openai/gpt-oss-20b", provider: "groq" },
+    { model: "gemini-flash-latest", provider: "gemini" },
+    { model: "gemini-3.8-flash", provider: "gemini" },
+  ];
+  for (const m of generalFallbackPool) {
+    if (selected.length >= 8) break;
+    addModel(m.model, m.provider);
+  }
+
+  return selected;
+}
+
 const postChat = async (req, res, next) => {
   try {
     const { text, attachment, repo } = req.body;
@@ -267,6 +390,20 @@ const postChat = async (req, res, next) => {
         }
       } catch (repoErr) {
         console.warn("[modelSelector] Error getting repo code context:", repoErr.message);
+      }
+    }
+
+    // Process attached documents (PDF, Word, etc.) to enrich prompt and compute accurate token limits
+    let attachmentText = "";
+    if (attachment) {
+      try {
+        attachmentText = await extractAttachmentText(attachment);
+        if (attachmentText) {
+          enrichedText = (enrichedText ? enrichedText + "\n\n" : "") +
+            `[Attached Document Content (${attachment.name || "File"})]:\n` + attachmentText;
+        }
+      } catch (attachErr) {
+        console.warn("[modelSelector] Error extracting attachment text:", attachErr.message);
       }
     }
 
@@ -357,7 +494,7 @@ const postChat = async (req, res, next) => {
 
     const selectionInputPayload = `
 USER_PROMPT:
-${enrichedText || text}
+${(enrichedText || text).slice(0, 4000)}
 
 REQUIRED_TOKENS:
 ${taskRequiredTokens}
@@ -516,20 +653,17 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
     }
   }
 
-    // Fallback: If AI selection models are down or rate limited, provide high-performance candidates
+    // Fallback: If AI selection models are down, rate limited, or fail, execute intelligent heuristic selection
     if (!selectedModels || !Array.isArray(selectedModels) || selectedModels.length === 0) {
-      console.log("[modelSelector] Falling back to default candidates from available models.");
-      selectedModels = [
-        { model: "gemini-3.5-flash-lite", provider: "gemini" },
-        { model: "gemini-3.5-flash", provider: "gemini" },
-        { model: "inclusionai/ling-3.0-flash-sante:free", provider: "openrouter" },
-        { model: "nvidia/nemotron-3.5-lightning:free", provider: "openrouter" },
-        { model: "openai/gpt-oss-120b", provider: "groq" },
-        { model: "google/gemma-4-26b-a4b-it:free", provider: "openrouter" },
-        { model: "cohere/north-mini-code:free", provider: "openrouter" },
-        { model: "gemini-flash-latest", provider: "gemini" },
-        { model: "openai/gpt-oss-20b", provider: "groq" },
-      ];
+      console.log("[modelSelector] All AI selection models failed or were exhausted. Executing heuristic selection process...");
+      selectedModels = heuristicModelSelection(
+        enrichedText || text,
+        userCurrentTokens,
+        taskRequiredTokens,
+        attachment,
+        repo
+      );
+      console.log(`[modelSelector] Heuristic selection selected ${selectedModels.length} diversified candidates:`, selectedModels);
     }
 
     // Ensure selectedModels has at least 2 distinct candidates across providers for resilience
