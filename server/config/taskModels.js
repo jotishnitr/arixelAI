@@ -339,25 +339,7 @@ const TASK_COMPLETION_MODELS = {
       provider: "openrouter",
       model: "fish-audio/s2.1-pro-free:free",
       displayName: "Fish Audio S2.1 Pro",
-      bestFunction: "High-quality text-to-speech and audio synthesis."
-    },
-    {
-      provider: "gemini",
-      model: "lyria-3-clip-preview",
-      displayName: "Lyria 3 Clip Preview",
-      bestFunction: "Music/audio generation, clip-oriented."
-    },
-    {
-      provider: "gemini",
-      model: "lyria-3-pro-preview",
-      displayName: "Lyria 3 Pro Preview",
-      bestFunction: "High-quality music/audio generation."
-    },
-    {
-      provider: "gemini",
-      model: "lyria-3.5",
-      displayName: "Lyria 3.5",
-      bestFunction: "Music/audio generation."
+      bestFunction: "High-quality text-to-speech, spoken audio, and sound synthesis."
     }
   ],
 
@@ -366,31 +348,7 @@ const TASK_COMPLETION_MODELS = {
       provider: "openrouter",
       model: "fish-audio/s2.1-pro-free:free",
       displayName: "Fish Audio S2.1 Pro",
-      bestFunction: "Text-to-speech voice synthesis and speech generation."
-    },
-    {
-      provider: "gemini",
-      model: "gemini-3.1-flash-tts-preview",
-      displayName: "Gemini 3.1 Flash TTS Preview",
-      bestFunction: "Fast text-to-speech generation."
-    },
-    {
-      provider: "gemini",
-      model: "gemini-3.8-flash-tts",
-      displayName: "Gemini 3.8 Flash TTS",
-      bestFunction: "Text-to-speech generation."
-    },
-    {
-      provider: "gemini",
-      model: "gemini-3.8-flash-lite-tts",
-      displayName: "Gemini 3.8 Flash Lite TTS",
-      bestFunction: "Lightweight text-to-speech generation."
-    },
-    {
-      provider: "gemini",
-      model: "gemini-2.5-flash-preview-tts",
-      displayName: "Gemini 2.5 Flash Preview TTS",
-      bestFunction: "Text-to-speech generation."
+      bestFunction: "High-fidelity text-to-speech and voice synthesis."
     },
     {
       provider: "groq",

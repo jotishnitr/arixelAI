@@ -222,9 +222,8 @@ function heuristicModelSelection(promptText, userCurrentTokens, requiredTokens, 
     /^\s*(picture|photo|image|drawing|illustration)\s+of\b/i.test(text);
 
   const isAudio =
-    /^\s*(generate|create|synthesize|make|produce)\s+(an?\s+)?(audio|speech|voice|tts|sound|podcast)\b/i.test(text) ||
-    /^\s*(speak|read\s+out\s+loud|text\s+to\s+speech)\b/i.test(text) ||
-    /\b(text\s+to\s+speech|voiceover|voice\s+synthesis|speech\s+synthesis)\b/i.test(text);
+    /\b(audio|speech|voice|tts|voiceover|read\s+out\s+loud|text\s+to\s+speech|sound\s+clip|podcast|music|song|melody)\b/i.test(text) &&
+    !/\b(code|python|react|javascript|bug|fix|function|database|sql)\b/i.test(text);
 
   const isCoding =
     Boolean(repo) ||
@@ -287,10 +286,9 @@ function heuristicModelSelection(promptText, userCurrentTokens, requiredTokens, 
   }
 
   // Immediate handling for audio / text-to-speech generation
-  if (category === "tts") {
+  if (category === "tts" || category === "audio_music") {
     return [
       { model: "fish-audio/s2.1-pro-free:free", provider: "openrouter" },
-      { model: "gemini-3.1-flash-tts-preview", provider: "gemini" },
     ];
   }
 
@@ -497,6 +495,22 @@ const postChat = async (req, res, next) => {
       rpd: model.rpd || 0,
     }));
 
+    // Ensure active free specialized models (like fish-audio) are represented in openRouterTokens
+    if (!openRouterTokens.some((m) => m.model === "fish-audio/s2.1-pro-free:free")) {
+      const openRouterRem = Math.max(0, (user.dailyOpenRouterTokenCapacity || 50000) - (user.dailyOpenRouterTokenUsed || 0));
+      openRouterTokens.push({
+        model: "fish-audio/s2.1-pro-free:free",
+        provider: "openrouter",
+        dailyTokenCapacity: 50000,
+        dailyTokensUsed: 0,
+        providerRemainingTokens: openRouterRem,
+        totalTokensUsed: 0,
+        rpm: 60,
+        tpm: 100000,
+        rpd: 1000,
+      });
+    }
+
     const userCurrentTokens = [...geminiTokens, ...openRouterTokens, ...groqTokens];
 
     // Compute task required tokens
@@ -554,16 +568,14 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
       console.log("[modelSelector] Image generation intent detected. Direct routing to free image models [SDXL, Pollinations].");
     }
 
-    // Fast path: If prompt is clearly requesting audio, speech, or TTS, route directly to Fish Audio
+    // Fast path: If prompt is clearly requesting audio, speech, voice, music, song, or TTS, route directly to Fish Audio
     const isAudioIntent =
-      /^\s*(generate|create|synthesize|make|produce)\s+(an?\s+)?(audio|speech|voice|tts|sound|podcast)\b/i.test(enrichedText || text || "") ||
-      /^\s*(speak|read\s+out\s+loud|text\s+to\s+speech)\b/i.test(enrichedText || text || "") ||
-      /\b(text\s+to\s+speech|voiceover|voice\s+synthesis|speech\s+synthesis)\b/i.test(enrichedText || text || "");
+      /\b(audio|speech|voice|tts|voiceover|read\s+out\s+loud|text\s+to\s+speech|sound\s+clip|podcast|music|song|melody)\b/i.test(enrichedText || text || "") &&
+      !/\b(code|python|react|javascript|bug|fix|function|database|sql)\b/i.test(enrichedText || text || "");
 
     if (isAudioIntent && !selectedModels) {
       selectedModels = [
         { model: "fish-audio/s2.1-pro-free:free", provider: "openrouter" },
-        { model: "gemini-3.1-flash-tts-preview", provider: "gemini" },
       ];
       console.log("[modelSelector] Audio/TTS intent detected. Direct routing to [fish-audio/s2.1-pro-free:free].");
     }
