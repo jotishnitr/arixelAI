@@ -1,14 +1,31 @@
 import Sidebar from "../components/Sidebar";
 import Chatarea from "../components/Chatarea";
 import Profile from "./ProfileModal";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { API_BASE_URL } from "../config";
+
 export default function Homepage() {
   const [context, setContext] = useState("");
   const [currentState, setCurrentState] = useState("hero");
   const [currentContext, setCurrentContext] = useState("new");
   const [contextHistory, setContextHistory] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const previousStateRef = useRef("hero");
+
+  // Keep track of the previous state (hero or chat) so closing profile restores the right screen
+  useEffect(() => {
+    if (currentState !== "profile") {
+      previousStateRef.current = currentState;
+    }
+  }, [currentState]);
+
+  const handleCloseProfile = () => {
+    setIsProfileOpen(false);
+    if (currentState === "profile") {
+      setCurrentState(previousStateRef.current || (context ? "chat" : "hero"));
+    }
+  };
 
   const getContextHistory = async () => {
     try {
@@ -46,6 +63,8 @@ export default function Homepage() {
         getContextHistory={getContextHistory}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
+        isProfileOpen={isProfileOpen}
+        setIsProfileOpen={setIsProfileOpen}
       />
       <Chatarea 
         context={context} 
@@ -57,8 +76,22 @@ export default function Homepage() {
         getContextHistory={getContextHistory}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
+        setContextHistory={setContextHistory}
       />
-      {currentState === "profile" && <Profile setCurrentState={setCurrentState} />}
+      {(isProfileOpen || currentState === "profile") && (
+        <Profile 
+          onClose={handleCloseProfile}
+          setCurrentState={(state) => {
+            if (state === "hero" || !state) {
+              handleCloseProfile();
+            } else {
+              setCurrentState(state);
+              setIsProfileOpen(false);
+            }
+          }}
+          previousState={previousStateRef.current || (context ? "chat" : "hero")}
+        />
+      )}
     </>
   );
 }

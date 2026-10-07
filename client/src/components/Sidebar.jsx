@@ -5,7 +5,7 @@ import settingsIcon from "../assets/settings.png";
 import profileIcon from "../assets/profile.png";
 import { useState, useEffect, useRef } from "react";
 import { API_BASE_URL } from "../config";
-export default function Sidebar({ context, setContext, currentState, setCurrentState, currentContext, setCurrentContext, contextHistory, setContextHistory, getContextHistory, isSidebarOpen, setIsSidebarOpen }) {
+export default function Sidebar({ context, setContext, currentState, setCurrentState, currentContext, setCurrentContext, contextHistory, setContextHistory, getContextHistory, isSidebarOpen, setIsSidebarOpen, isProfileOpen, setIsProfileOpen }) {
   const [currentChat, setCurrentChat] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [tokenStats, setTokenStats] = useState(null);
@@ -133,7 +133,7 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
           {contextHistory.map((chat) => (
             <div
               className={`${
-                currentChat == chat._id
+                currentChat == chat._id || (context && chat.context === context)
                   ? "chat-container-active"
                   : "chat-container"
               }${activeMenuId === chat._id ? " menu-open" : ""}`}
@@ -180,7 +180,14 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
           <div
             className="sidebar-tokens-badge"
             title={`Daily Capacity: ${tokenStats.summary.totalDailyCapacity?.toLocaleString()} tokens | Used Today: ${tokenStats.summary.dailyTokensUsed?.toLocaleString() || 0} tokens`}
-            onClick={() => { setCurrentState("profile"); setIsSidebarOpen(false); }}
+            onClick={() => { 
+              if (setIsProfileOpen) {
+                setIsProfileOpen(true);
+              } else {
+                setCurrentState("profile"); 
+              }
+              setIsSidebarOpen(false); 
+            }}
           >
             <div className="tokens-badge-top">
               <span className="tokens-badge-title">⚡ Daily Tokens</span>
@@ -203,8 +210,15 @@ export default function Sidebar({ context, setContext, currentState, setCurrentS
           </div>
         )}
         <div
-          className={currentState === "profile" ? "profile-container-active" : "profile-container"}
-          onClick={() => { setCurrentState("profile"); setIsSidebarOpen(false); }}
+          className={isProfileOpen || currentState === "profile" ? "profile-container-active" : "profile-container"}
+          onClick={() => { 
+            if (setIsProfileOpen) {
+              setIsProfileOpen((prev) => !prev);
+            } else {
+              setCurrentState("profile"); 
+            }
+            setIsSidebarOpen(false); 
+          }}
         >
           <div className="profile-icon">
             <img src={profileIcon} alt="Profile Icon" />

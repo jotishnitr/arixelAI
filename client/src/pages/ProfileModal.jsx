@@ -5,9 +5,17 @@ import "./Profile.css";
 
 import { API_BASE_URL } from "../config";
 
-export default function Profile({ setCurrentState }) {
+export default function Profile({ setCurrentState, onClose, previousState }) {
     const navigate = useNavigate();
     const [profileState, setProfileState] = useState("display");
+
+    const handleClose = () => {
+        if (onClose) {
+            onClose();
+        } else if (setCurrentState) {
+            setCurrentState(previousState || "chat");
+        }
+    };
 
     const [name, setName] = useState("");
     const [age, setAge] = useState("");
@@ -71,13 +79,13 @@ export default function Profile({ setCurrentState }) {
 
     useEffect(() => {
         function handleKeyDown(e) {
-            if (e.key === "Escape" && setCurrentState) {
-                setCurrentState("hero");
+            if (e.key === "Escape") {
+                handleClose();
             }
         }
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [setCurrentState]);
+    }, [onClose, setCurrentState, previousState]);
 
     async function handleSubmit(e) {
         if (e) e.preventDefault();
@@ -133,12 +141,12 @@ export default function Profile({ setCurrentState }) {
         return (
             <section
                 className="profile-content-area"
-                onClick={(e) => { if (e.target === e.currentTarget && setCurrentState) setCurrentState("hero"); }}
+                onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
             >
                 <div className="profile-card">
                     <div className="profile-header">
                         <h2 className="profile-title">Edit Profile</h2>
-                        <button className="close-profile-btn" aria-label="Close Profile" onClick={() => setCurrentState("hero")}>×</button>
+                        <button className="close-profile-btn" aria-label="Close Profile" onClick={handleClose}>×</button>
                     </div>
 
                     <div className="profile-avatar-container">
@@ -216,12 +224,12 @@ export default function Profile({ setCurrentState }) {
         return (
             <section
                 className="profile-content-area"
-                onClick={(e) => { if (e.target === e.currentTarget && setCurrentState) setCurrentState("hero"); }}
+                onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
             >
                 <div className="profile-card">
                     <div className="profile-header">
                         <h2 className="profile-title">User Profile</h2>
-                        <button className="close-profile-btn" aria-label="Close Profile" onClick={() => setCurrentState("hero")}>×</button>
+                        <button className="close-profile-btn" aria-label="Close Profile" onClick={handleClose}>×</button>
                     </div>
 
                     <div className="profile-avatar-container">

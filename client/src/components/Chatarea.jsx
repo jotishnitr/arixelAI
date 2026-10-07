@@ -11,6 +11,76 @@ import "./Chatarea.css";
 import Markdown from "react-markdown";
 import recognition from "../utils/speechRecognition";
 import { API_BASE_URL } from "../config";
+
+function CodeBlock({ children, ...props }) {
+  const [copied, setCopied] = useState(false);
+  const preRef = useRef(null);
+
+  const childProps = children?.props || {};
+  const langMatch = /language-([a-zA-Z0-9_-]+)/.exec(childProps.className || "");
+  const language = langMatch ? langMatch[1] : "";
+
+  const handleCopyCode = async (e) => {
+    e.stopPropagation();
+    const codeText = preRef.current?.innerText || "";
+    if (!codeText) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(codeText);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = codeText;
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy code block:", err);
+    }
+  };
+
+  return (
+    <div className="code-block-container">
+      <div className="code-block-header">
+        <span className="code-block-lang">{language || "code"}</span>
+        <button
+          type="button"
+          className={`copy-code-btn ${copied ? "copied" : ""}`}
+          onClick={handleCopyCode}
+          title={copied ? "Copied code!" : "Copy code"}
+          aria-label="Copy code to clipboard"
+        >
+          {copied ? (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span>Copied!</span>
+            </>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              <span>Copy code</span>
+            </>
+          )}
+        </button>
+      </div>
+      <pre ref={preRef} {...props}>
+        {children}
+      </pre>
+    </div>
+  );
+}
+
 export default function Chatarea({
   setContext,
   context,
@@ -21,6 +91,7 @@ export default function Chatarea({
   getContextHistory,
   isSidebarOpen,
   setIsSidebarOpen,
+  setContextHistory,
 }) {
   const [chatInput, setChatInput] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
@@ -49,6 +120,51 @@ export default function Chatarea({
   const [showPromptTokens, setShowPromptTokens] = useState(false);
   const [activePromptTokenIndex, setActivePromptTokenIndex] = useState(null);
   const popoverRef = useRef(null);
+
+  // Copy to clipboard state & handler
+  const [copiedId, setCopiedId] = useState(null);
+
+  const handleCopyMessage = async (content, copyId) => {
+    if (!content) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = content;
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setCopiedId(copyId);
+      setTimeout(() => {
+        setCopiedId((prev) => (prev === copyId ? null : prev));
+      }, 2000);
+    } catch (err) {
+      console.error("Failed to copy message:", err);
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = content;
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        setCopiedId(copyId);
+        setTimeout(() => {
+          setCopiedId((prev) => (prev === copyId ? null : prev));
+        }, 2000);
+      } catch (fallbackErr) {
+        console.error("Fallback copy failed:", fallbackErr);
+      }
+    }
+  };
 
   // Click outside listener for token popover
   useEffect(() => {
@@ -335,8 +451,16 @@ export default function Chatarea({
   useEffect(() => {
     if (context) {
       getChatHistory(context);
+    } else {
+      setChatHistory([]);
     }
   }, [context]);
+
+  useEffect(() => {
+    if (currentContext === "new") {
+      setChatHistory([]);
+    }
+  }, [currentContext]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -377,11 +501,24 @@ export default function Chatarea({
       role: "model",
       content: "Generating response...",
     };
-    setChatHistory((prev) => [
-      ...prev.filter((msg) => msg && msg !== ""),
-      userMessage,
-      thinkingMessage,
-    ]);
+    const isNewChat = currentContext === "new" || !context;
+
+    if (isNewChat) {
+      setChatHistory([userMessage, thinkingMessage]);
+      if (setContextHistory) {
+        const optimisticTitle = messageToSend.trim().slice(0, 32);
+        setContextHistory((prev) => [
+          { _id: "optimistic-" + Date.now(), context: optimisticTitle },
+          ...prev.filter((c) => !c._id?.startsWith("optimistic-")),
+        ]);
+      }
+    } else {
+      setChatHistory((prev) => [
+        ...prev.filter((msg) => msg && msg !== ""),
+        userMessage,
+        thinkingMessage,
+      ]);
+    }
     setCurrentState("chat");
     setChatInput("");
     setFilePreview(null);
@@ -400,7 +537,7 @@ export default function Chatarea({
         credentials: "include",
         body: JSON.stringify({
           text: promptToSend,
-          context: currentContext === "new" ? "" : context,
+          context: isNewChat ? "" : context,
           attachment: attachmentObj,
           repo: attachedRepo,
         }),
@@ -425,7 +562,7 @@ export default function Chatarea({
         } else {
           getChatHistory(data.context);
         }
-        if (currentContext === "new") {
+        if (isNewChat) {
           getContextHistory();
         }
         setCurrentContext("old");
@@ -689,63 +826,157 @@ export default function Chatarea({
                         </div>
                       </div>
                     ) : (
-                      <Markdown remarkPlugins={[remarkGfm]}>
+                      <Markdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          pre: CodeBlock,
+                        }}
+                      >
                         {msg.content || ""}
                       </Markdown>
                     )}
                   </div>
                   {msg.role === "model" &&
-                    msg.content !== "Generating response..." &&
-                    (msg.tokensUsed || msg.modelUsed) && (
-                      <div className="message-token-meta">
-                        {msg.modelUsed?.model && (
-                          <span
-                            className="meta-model-tag"
-                            title={`Provider: ${msg.modelUsed.provider || "AI"}`}
+                    msg.content !== "Generating response..." && (
+                      <div className="ai-message-footer">
+                        <div className="ai-meta-tags">
+                          {msg.modelUsed?.model && (
+                            <span
+                              className="meta-model-tag"
+                              title={`Provider: ${msg.modelUsed.provider || "AI"}`}
+                            >
+                              {msg.modelUsed.model}
+                            </span>
+                          )}
+                          {msg.tokensUsed > 0 && (
+                            <span
+                              className="meta-tokens-tag"
+                              title="Tokens consumed by this request"
+                            >
+                              ⚡ {msg.tokensUsed.toLocaleString()} tokens
+                            </span>
+                          )}
+                        </div>
+                        <div className="ai-actions-row">
+                          <button
+                            type="button"
+                            className={`copy-response-btn ${copiedId === `ai-${index}` ? "copied" : ""}`}
+                            onClick={() => handleCopyMessage(msg.content, `ai-${index}`)}
+                            title={copiedId === `ai-${index}` ? "Copied!" : "Copy response"}
+                            aria-label="Copy response to clipboard"
                           >
-                            {msg.modelUsed.model}
-                          </span>
-                        )}
-                        {msg.tokensUsed > 0 && (
-                          <span
-                            className="meta-tokens-tag"
-                            title="Tokens consumed by this request"
-                          >
-                            ⚡ {msg.tokensUsed.toLocaleString()} tokens
-                          </span>
-                        )}
+                            {copiedId === `ai-${index}` ? (
+                              <>
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                <span>Copied!</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                </svg>
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     )}
                   {msg.role === "user" && (
                     <div className="user-message-footer">
-                      <button
-                        type="button"
-                        className="user-token-inspect-btn"
-                        onClick={() =>
-                          setActivePromptTokenIndex(
-                            activePromptTokenIndex === index ? null : index
-                          )
-                        }
-                        title="Click to view token usage for this prompt"
-                      >
-                        <svg
-                          width="11"
-                          height="11"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                      <div className="user-footer-actions">
+                        <button
+                          type="button"
+                          className={`copy-response-btn user-copy-action-btn ${copiedId === `user-${index}` ? "copied" : ""}`}
+                          onClick={() => handleCopyMessage(msg.content, `user-${index}`)}
+                          title={copiedId === `user-${index}` ? "Copied prompt!" : "Copy prompt"}
+                          aria-label="Copy prompt"
                         >
-                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                        </svg>
-                        <span>
-                          {activePromptTokenIndex === index
-                            ? "Hide tokens"
-                            : `⚡ ~${Math.ceil((msg.content?.length || 0) / 3.8)} tokens`}
-                        </span>
-                      </button>
+                          {copiedId === `user-${index}` ? (
+                            <>
+                              <svg
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                              <span>Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                              </svg>
+                              <span>Copy</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="user-token-inspect-btn"
+                          onClick={() =>
+                            setActivePromptTokenIndex(
+                              activePromptTokenIndex === index ? null : index
+                            )
+                          }
+                          title="Click to view token usage for this prompt"
+                        >
+                          <svg
+                            width="11"
+                            height="11"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                          </svg>
+                          <span>
+                            {activePromptTokenIndex === index
+                              ? "Hide tokens"
+                              : `⚡ ~${Math.ceil((msg.content?.length || 0) / 3.8)} tokens`}
+                          </span>
+                        </button>
+                      </div>
                       {activePromptTokenIndex === index && (
                         <div className="user-token-breakdown-card">
                           <div className="token-breakdown-title">
