@@ -422,6 +422,15 @@ const postChat = async (req, res, next) => {
       });
     }
 
+    // Clean up any historical messages that might have oversized raw base64 from earlier requests
+    if (chat.messages && chat.messages.length > 0) {
+      chat.messages.forEach((msg) => {
+        if (msg.attachment && msg.attachment.base64 && msg.attachment.base64.length > 500000) {
+          msg.attachment.base64 = undefined;
+        }
+      });
+    }
+
     // Append and save incoming user message to chat history
     // Sanitize attachment to avoid exceeding MongoDB's 16MB document size limit (BSONObj size error)
     const dbAttachment = sanitizeAttachmentForDb(attachment);

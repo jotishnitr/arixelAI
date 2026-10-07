@@ -406,6 +406,16 @@ const handleChatResponse = async (req, res) => {
       tokensUsed: actualTokens,
       modelUsed: successfulModel,
     });
+
+    // Clean up any historical messages that might have oversized raw base64 from earlier requests
+    if (chat.messages && chat.messages.length > 0) {
+      chat.messages.forEach((msg) => {
+        if (msg.attachment && msg.attachment.base64 && msg.attachment.base64.length > 500000) {
+          msg.attachment.base64 = undefined;
+        }
+      });
+    }
+
     await chat.save();
 
     // 6. Update user's token usage in database
