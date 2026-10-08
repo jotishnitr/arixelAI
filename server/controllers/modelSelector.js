@@ -371,11 +371,13 @@ const postChat = async (req, res, next) => {
       user.geminiModels.length === 0 ||
       !user.openRouterModels ||
       user.openRouterModels.length === 0 ||
-      (user.geminiModels[0] && user.geminiModels[0].dailyTokenCapacity < 1000)
+      (user.geminiModels[0] && user.geminiModels[0].dailyTokenCapacity < 1000) ||
+      !user.resetDate ||
+      new Date() >= new Date(user.resetDate)
     ) {
       try {
         const { checkAndFetchAllTokenLimits } = require("../utils/gettingTokenLimits");
-        await checkAndFetchAllTokenLimits(true);
+        await checkAndFetchAllTokenLimits(false);
         const refreshedUser = await User.findById(dbUserId);
         if (refreshedUser) {
           user = refreshedUser;

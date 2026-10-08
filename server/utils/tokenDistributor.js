@@ -13,7 +13,10 @@ async function tokenDistributor(num = 100, resetDailyUsage = false) {
     const totalCapacity = geminiUserCap + openRouterUserCap + groqUserCap;
 
     if (resetDailyUsage) {
-      // Midnight Reset: explicitly reset daily counters to 0
+      // Midnight / Scheduled Reset: explicitly reset daily counters to 0 and advance resetDate
+      const now = new Date();
+      const nextResetDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0));
+
       const geminiModels = (appConfig.geminiModels || []).map((m) => ({
         model: m.model,
         displayName: m.displayName || m.model,
@@ -58,6 +61,7 @@ async function tokenDistributor(num = 100, resetDailyUsage = false) {
           dailyOpenRouterTokenUsed: 0,
           dailyGroqTokenUsed: 0,
           dailyTotalTokensUsed: 0,
+          resetDate: nextResetDate,
         },
         $unset: {
           cerebrasModels: "",
@@ -66,7 +70,7 @@ async function tokenDistributor(num = 100, resetDailyUsage = false) {
         },
       });
 
-      console.log("✅ Daily token usage reset to 0 at scheduled reset.");
+      console.log(`✅ Daily token usage reset to 0 for all users. Next reset: ${nextResetDate.toISOString()}`);
     } else {
       // Startup / Model Sync: update capacities and models while PRESERVING user balance and usage
       const users = await User.find({}, "_id geminiModels openRouterModels groqModels");

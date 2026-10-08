@@ -16,11 +16,15 @@ const getTokenStats = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Auto-heal: If user has no models or DB was cleared, fetch tokens and distribute
-    if (!user.geminiModels || user.geminiModels.length === 0 || !user.openRouterModels || user.openRouterModels.length === 0) {
+    // Auto-heal: If user has no models, DB was cleared, or resetDate has passed, ensure fresh tokens
+    if (
+      !user.geminiModels || user.geminiModels.length === 0 ||
+      !user.openRouterModels || user.openRouterModels.length === 0 ||
+      !user.resetDate || new Date() >= new Date(user.resetDate)
+    ) {
       try {
         const { checkAndFetchAllTokenLimits } = require("../utils/gettingTokenLimits");
-        await checkAndFetchAllTokenLimits(true);
+        await checkAndFetchAllTokenLimits(false);
         const refreshedUser = await User.findById(dbUserId);
         if (refreshedUser) {
           user = refreshedUser;

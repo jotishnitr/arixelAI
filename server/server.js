@@ -36,7 +36,7 @@ app.use(
   }),
 );
 
-const { initTokenLimitsCron } = require("./utils/gettingTokenLimits.js");
+const { initTokenLimitsCron, tokenLimitsMiddleware } = require("./utils/gettingTokenLimits.js");
 
 // Increase body parser limits for file attachments (PDFs, docs, images)
 app.use(express.json({ limit: "100mb" }));
@@ -60,6 +60,9 @@ app.use(
 );
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Token limits middleware: checks and fetches fresh tokens on first request after reset, then resets user balances
+app.use(tokenLimitsMiddleware("all"));
 
 app.use("/api", postChat);
 app.use("/api", getChatContextHistory);

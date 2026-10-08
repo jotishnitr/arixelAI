@@ -282,10 +282,13 @@ const handleChatResponse = async (req, res) => {
 
             if (provider === "openrouter") {
               if (modelId === "fish-audio/s2.1-pro-free:free" || modelId.includes("fish-audio")) {
-                const cleanInput = (promptText || "")
-                  .replace(/^(generate|create|synthesize|make|produce)\s+(an?\s+)?(audio|speech|voice|sound)\s+(of\s+|saying\s+|reading\s+)?/i, "")
-                  .replace(/^(speak|read\s+out\s+loud|text\s+to\s+speech)\s*:\s*/i, "")
-                  .trim() || promptText;
+                let cleanInput = (promptText || "")
+                  .replace(/^(generate|create|synthesize|make|produce)\s+(an?\s+)?(audio|speech|voice|sound)(\s+file)?(\s+(on|for|of|with|saying|reading))?(\s+this\s+text)?\s*[:"']?/i, "")
+                  .replace(/^(speak|read\s+out\s+loud|text\s+to\s+speech)\s*[:"']?\s*/i, "")
+                  .trim();
+                
+                // Remove outer surrounding quotes if present
+                cleanInput = cleanInput.replace(/^["'`]+|["'`]+$/g, "").trim() || promptText;
 
                 console.log(`[chatResponse] Calling OpenRouter TTS endpoint with model [${modelId}]...`);
                 const ttsRes = await fetch("https://openrouter.ai/api/v1/audio/speech", {
@@ -297,6 +300,7 @@ const handleChatResponse = async (req, res) => {
                   body: JSON.stringify({
                     model: modelId,
                     input: cleanInput,
+                    response_format: "mp3",
                   }),
                 });
 

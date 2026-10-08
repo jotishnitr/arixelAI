@@ -421,31 +421,49 @@ async function checkAndFetchProviderTokens(provider, force = false) {
     return inFlightFetches[p];
 }
 
+let inFlightAllCheck = null;
+
 /**
  * Checks and fetches tokens for all providers where reset is due.
+ * First fetches all tokens from APIs for providers whose scheduled reset time has arrived,
+ * and then resets daily token usage for all users.
  *
  * @param {boolean} [force=false]
  * @returns {Promise<{ results: Array, appConfig: Object }>}
  */
 async function checkAndFetchAllTokenLimits(force = false) {
-    const providers = ["gemini", "openrouter", "groq"];
-    const results = await Promise.all(
-        providers.map((provider) => checkAndFetchProviderTokens(provider, force))
-    );
-
-    const appConfig = await AppConfiguration.findOne();
-
-    // Automatically distribute updated model tokens without resetting user balances
-    try {
-        await distributeTokensToUsers(100, false);
-    } catch (err) {
-        console.error("[gettingTokenLimits] Error distributing tokens to users:", err.message);
+    if (inFlightAllCheck) {
+        return inFlightAllCheck;
     }
 
-    return {
-        results,
-        appConfig,
-    };
+    inFlightAllCheck = (async () => {
+        try {
+            const providers = ["gemini", "openrouter", "groq"];
+            const results = await Promise.all(
+                providers.map((provider) => checkAndFetchProviderTokens(provider, force))
+            );
+
+            const appConfig = await AppConfiguration.findOne();
+
+            const anyFetched = results.some((r) => r && r.fetched);
+            if (anyFetched || force) {
+                console.log("[gettingTokenLimits] Reset timing reached. Resetting daily token usage for all users...");
+                await distributeTokensToUsers(100, true);
+            }
+
+            return {
+                results,
+                appConfig,
+            };
+        } catch (err) {
+            console.error("[gettingTokenLimits] Error in checkAndFetchAllTokenLimits:", err.message);
+            return { results: [], appConfig: null };
+        } finally {
+            inFlightAllCheck = null;
+        }
+    })();
+
+    return inFlightAllCheck;
 }
 
 /**
