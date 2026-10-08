@@ -109,13 +109,11 @@ function resolveModelForProvider(modelId, provider) {
   }
 
   if (p === "gemini") {
-    // Route to stable Gemini 2.5 Flash to avoid 503 high-demand errors from flash-lite
-    if (m.includes("deep-research") || m.includes("antigravity") || m.includes("robotics")) return "gemini-2.5-flash";
-    if (m === "gemini-3.5-flash" || m === "gemini-3.5-flash-lite") return "gemini-2.5-flash";
-    if (m === "gemini-3.6-flash" || m === "gemini-3.8-flash") return "gemini-2.5-flash";
-    if (m === "gemini-2.5-flash" || m === "gemini-2.5-flash-lite") return "gemini-2.5-flash";
-    if (m === "gemini-2.5-pro") return "gemini-2.5-pro";
-    return "gemini-2.5-flash";
+    // If a deprecated model is requested, map to active working endpoints
+    if (m.includes("2.5") || m.includes("1.5") || m.includes("2.0")) {
+      return "gemini-flash-lite-latest";
+    }
+    return m;
   }
 
   if (p === "openrouter") {
