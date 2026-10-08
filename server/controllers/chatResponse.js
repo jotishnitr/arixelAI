@@ -312,7 +312,7 @@ const handleChatResponse = async (req, res) => {
                   .replace(/^(generate|create|synthesize|make|produce)\s+(an?\s+)?(audio|speech|voice|sound)(\s+file)?(\s+(on|for|of|with|saying|reading))?(\s+this\s+text)?\s*[:"']?/i, "")
                   .replace(/^(speak|read\s+out\s+loud|text\s+to\s+speech)\s*[:"']?\s*/i, "")
                   .trim();
-                
+
                 // Remove outer surrounding quotes if present
                 cleanInput = cleanInput.replace(/^["'`]+|["'`]+$/g, "").trim() || promptText;
 
