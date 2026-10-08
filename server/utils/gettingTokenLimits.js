@@ -445,8 +445,19 @@ async function checkAndFetchAllTokenLimits(force = false) {
 
             const appConfig = await AppConfiguration.findOne();
 
-            const anyFetched = results.some((r) => r && r.fetched);
-            if (anyFetched || force) {
+            const User = require("../models/UserModel");
+            const anyUserExpired = Boolean(await User.exists({ resetDate: { $lte: new Date() } }));
+            let anyFetched = results.some((r) => r && r.fetched);
+
+            if (anyUserExpired && !anyFetched && !force) {
+                console.log("[gettingTokenLimits] Users have expired resetDate. Fetching model tokens from APIs...");
+                const freshResults = await Promise.all(
+                    providers.map((provider) => checkAndFetchProviderTokens(provider, true))
+                );
+                anyFetched = freshResults.some((r) => r && r.fetched);
+            }
+
+            if (anyFetched || force || anyUserExpired) {
                 console.log("[gettingTokenLimits] Reset timing reached. Resetting daily token usage for all users...");
                 await distributeTokensToUsers(100, true);
             }
