@@ -7,6 +7,7 @@ const { getRepoCodeContext } = require("../utils/githubRepoHelper");
 const { executeWithModelQueue } = require("../utils/modelQueue");
 const tokenCounter = require("../utils/tokenCounter");
 const { extractAttachmentText, sanitizeAttachmentForDb } = require("../utils/attachmentHelper");
+const { getRelevantChunks } = require("../utils/document_chunks");
 
 const SYSTEM_PROMPT = `You are ArixelCore-1o, the flagship AI model developed by ArixelAI, founded by Jotish Kumar.
 
@@ -180,12 +181,34 @@ const handleChatResponse = async (req, res) => {
       }
     }
 
-    // 2. Process attached documents (PDF, Word, or plain text)
+    // 2. Process attached documents (PDF, Word, or plain text) with RAG
     let docText = "";
     if (attachment) {
       docText = await extractAttachmentText(attachment);
       if (docText) {
-        enrichedPrompt = `${enrichedPrompt}\n\n[Attached Document Content (${attachment.name || "File"})]:\n${docText}`;
+        let attachedContent = docText;
+        let isRagUsed = false;
+
+        // Try RAG retrieval for large documents when user asks a question
+        if (docText.length > 1500 && promptText) {
+          try {
+            const chunks = await getRelevantChunks(docText, promptText, {
+              filename: attachment.name,
+              userId: dbUserId,
+            });
+
+            if (chunks && chunks.trim() && chunks !== "No relevant documents found.") {
+              attachedContent = chunks;
+              isRagUsed = true;
+              console.log(`[chatResponse] RAG: Attached relevant chunks for ${attachment.name || "file"}`);
+            }
+          } catch (ragErr) {
+            console.warn("[chatResponse] RAG failed, falling back to full document:", ragErr.message);
+          }
+        }
+
+        const label = isRagUsed ? "Relevant Document Excerpts" : "Attached Document Content";
+        enrichedPrompt = `${enrichedPrompt}\n\n[${label} (${attachment.name || "File"})]:\n${attachedContent}`;
       }
     }
 
