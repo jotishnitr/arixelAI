@@ -30,6 +30,7 @@ async function tokenDistributor(num = 100, resetDailyUsage = false) {
 
       const openRouterModels = (appConfig.openRouterModels || []).map((m) => ({
         model: m.model,
+        displayName: m.displayName || (m.model === "fish-audio/s2.1-pro-free:free" ? "Fish Audio S2.1 Pro" : m.model),
         dailyTokenCapacity: openRouterUserCap,
         dailyTokensUsed: 0,
         totalTokensUsed: 0,
@@ -37,6 +38,19 @@ async function tokenDistributor(num = 100, resetDailyUsage = false) {
         tpm: m.tpm || 0,
         rpd: m.rpd || 0,
       }));
+
+      if (!openRouterModels.some((m) => m.model === "fish-audio/s2.1-pro-free:free")) {
+        openRouterModels.push({
+          model: "fish-audio/s2.1-pro-free:free",
+          displayName: "Fish Audio S2.1 Pro",
+          dailyTokenCapacity: openRouterUserCap,
+          dailyTokensUsed: 0,
+          totalTokensUsed: 0,
+          rpm: 20,
+          tpm: 40000,
+          rpd: 50,
+        });
+      }
 
       const groqModels = (appConfig.groqModels || []).map((m) => ({
         model: m.model,
@@ -92,6 +106,7 @@ async function tokenDistributor(num = 100, resetDailyUsage = false) {
 
         const openRouterModels = (appConfig.openRouterModels || []).map((m) => ({
           model: m.model,
+          displayName: m.displayName || (m.model === "fish-audio/s2.1-pro-free:free" ? "Fish Audio S2.1 Pro" : m.model),
           dailyTokenCapacity: openRouterUserCap,
           dailyTokensUsed: openRouterUsageMap.get(m.model)?.daily || 0,
           totalTokensUsed: openRouterUsageMap.get(m.model)?.total || 0,
@@ -99,6 +114,19 @@ async function tokenDistributor(num = 100, resetDailyUsage = false) {
           tpm: m.tpm || 0,
           rpd: m.rpd || 0,
         }));
+
+        if (!openRouterModels.some((m) => m.model === "fish-audio/s2.1-pro-free:free")) {
+          openRouterModels.push({
+            model: "fish-audio/s2.1-pro-free:free",
+            displayName: "Fish Audio S2.1 Pro",
+            dailyTokenCapacity: openRouterUserCap,
+            dailyTokensUsed: openRouterUsageMap.get("fish-audio/s2.1-pro-free:free")?.daily || 0,
+            totalTokensUsed: openRouterUsageMap.get("fish-audio/s2.1-pro-free:free")?.total || 0,
+            rpm: 20,
+            tpm: 40000,
+            rpd: 50,
+          });
+        }
 
         const groqModels = (appConfig.groqModels || []).map((m) => ({
           model: m.model,

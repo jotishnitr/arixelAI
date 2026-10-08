@@ -422,16 +422,25 @@ const handleChatResponse = async (req, res) => {
       });
     }
 
-    const isMediaProvider =
+    const isImageProvider =
       successfulModel?.provider === "pollinations" ||
       successfulModel?.provider === "sdxl" ||
-      successfulModel?.provider === "ovh" ||
-      Boolean(successfulModel?.model && (successfulModel.model.includes("fish-audio") || successfulModel.model.includes("tts")));
+      successfulModel?.provider === "ovh";
+
+    const isAudioModel = Boolean(
+      successfulModel?.model &&
+      (successfulModel.model.includes("fish-audio") || successfulModel.model.includes("tts"))
+    );
 
     // Calculate estimated actual tokens for this exchange
-    const actualTokens = isMediaProvider
-      ? 0
-      : tokenCounter.estimateTokens(finalResponse) + tokenCounter.estimateTokens(enrichedPrompt);
+    let actualTokens = 0;
+    if (isAudioModel) {
+      // Audio speech generation: calculate based on input prompt plus speech synthesis overhead
+      const promptTokens = tokenCounter.estimateTokens(enrichedPrompt || promptText);
+      actualTokens = Math.max(60, promptTokens + Math.ceil(promptTokens * 0.5) + 30);
+    } else if (!isImageProvider) {
+      actualTokens = tokenCounter.estimateTokens(finalResponse) + tokenCounter.estimateTokens(enrichedPrompt);
+    }
 
     // Push the model's response with token and model metadata
     chat.messages.push({
@@ -453,7 +462,7 @@ const handleChatResponse = async (req, res) => {
     await chat.save();
 
     // 6. Update user's token usage in database
-    if (dbUserId && successfulModel && !isMediaProvider && actualTokens > 0) {
+    if (dbUserId && successfulModel && !isImageProvider && actualTokens > 0) {
       try {
         const providerFieldMap = {
           gemini: "dailyGeminiTokenUsed",

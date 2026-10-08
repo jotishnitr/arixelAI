@@ -264,6 +264,20 @@ async function fetchOpenRouterTokens() {
         console.warn("[gettingTokenLimits] Could not fetch OpenRouter models:", err.message);
     }
 
+    // Ensure specialized free audio/TTS model (fish-audio) is always integrated in openRouterModels
+    if (!models.some((m) => m.model === "fish-audio/s2.1-pro-free:free")) {
+        const fishLimits = getOpenRouterRateLimits("fish-audio/s2.1-pro-free:free", keyInfo);
+        models.push({
+            model: "fish-audio/s2.1-pro-free:free",
+            displayName: "Fish Audio S2.1 Pro",
+            contextLength: 4096,
+            maxCompletionTokens: 2048,
+            rpm: fishLimits.rpm || 20,
+            tpm: fishLimits.tpm || 40000,
+            rpd: fishLimits.rpd || 50,
+        });
+    }
+
     const dailyLimit = keyInfo?.freeModelDailyRequests?.limit
         ? keyInfo.freeModelDailyRequests.limit * 2000
         : 50000;
