@@ -72,7 +72,9 @@ function buildGeminiContents(historyMessages, currentPrompt, attachment, docText
           data: cleanB64,
         },
       });
-    } else if (mime.includes("pdf") && (!docText || docText.length < 50)) {
+    } else if (mime.includes("pdf") && (!docText || docText.length < 600)) {
+      // Scanned or photographed PDFs have little/no extracted digital text (< 600 chars).
+      // Pass the raw PDF binary so Gemini's multimodal vision engine reads the pages visually via OCR.
       currentParts.push({
         inlineData: {
           mimeType: "application/pdf",
@@ -107,12 +109,13 @@ function resolveModelForProvider(modelId, provider) {
   }
 
   if (p === "gemini") {
-    if (m.includes("deep-research") || m.includes("antigravity") || m.includes("robotics")) return "gemini-3.5-flash-lite";
-    if (m === "gemini-3.5-flash") return "gemini-3.5-flash-lite";
-    if (m === "gemini-3.6-flash") return "gemini-3.8-flash"; // Reliable fallback when 3.6 encounters 503 high demand
-    if (m === "gemini-2.5-flash" || m === "gemini-2.5-flash-lite") return "gemini-flash-latest";
-    if (m === "gemini-2.5-pro") return "gemini-3.5-flash";
-    return m;
+    // Route to stable Gemini 2.5 Flash to avoid 503 high-demand errors from flash-lite
+    if (m.includes("deep-research") || m.includes("antigravity") || m.includes("robotics")) return "gemini-2.5-flash";
+    if (m === "gemini-3.5-flash" || m === "gemini-3.5-flash-lite") return "gemini-2.5-flash";
+    if (m === "gemini-3.6-flash" || m === "gemini-3.8-flash") return "gemini-2.5-flash";
+    if (m === "gemini-2.5-flash" || m === "gemini-2.5-flash-lite") return "gemini-2.5-flash";
+    if (m === "gemini-2.5-pro") return "gemini-2.5-pro";
+    return "gemini-2.5-flash";
   }
 
   if (p === "openrouter") {
@@ -189,8 +192,8 @@ const handleChatResponse = async (req, res) => {
         let attachedContent = docText;
         let isRagUsed = false;
 
-        // Try RAG retrieval for large documents when user asks a question
-        if (docText.length > 1500 && promptText) {
+        // Try RAG retrieval for documents (>500 chars) when user asks a question
+        if (docText.length > 500 && promptText) {
           try {
             const chunks = await getRelevantChunks(docText, promptText, {
               filename: attachment.name,
