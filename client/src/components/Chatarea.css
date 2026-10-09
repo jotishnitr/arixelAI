@@ -2225,4 +2225,210 @@
     border-color: rgba(139, 92, 246, 0.6);
 }
 
+/* ==========================================================================
+   Premium AI Thinking & Response Generation Card
+   ========================================================================== */
+
+.premium-thinking-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px 18px;
+    background: rgba(15, 28, 46, 0.7);
+    border: 1px solid rgba(147, 197, 253, 0.18);
+    border-radius: 14px;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    max-width: 580px;
+    width: 100%;
+    animation: thinkingFadeIn 0.3s ease-out;
+}
+
+@keyframes thinkingFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.thinking-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.thinking-orb {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.orb-center {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #60A5FA 0%, #A855F7 100%);
+    box-shadow: 0 0 12px rgba(96, 165, 250, 0.8), 0 0 20px rgba(168, 85, 247, 0.5);
+    animation: orbPulse 1.8s infinite ease-in-out;
+}
+
+.orb-wave {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(96, 165, 250, 0.4);
+    animation: orbRipple 1.8s infinite ease-out;
+}
+
+@keyframes orbPulse {
+    0%, 100% {
+        transform: scale(0.9);
+        opacity: 0.85;
+    }
+    50% {
+        transform: scale(1.15);
+        opacity: 1;
+        box-shadow: 0 0 18px rgba(96, 165, 250, 1), 0 0 28px rgba(168, 85, 247, 0.8);
+    }
+}
+
+@keyframes orbRipple {
+    0% {
+        transform: scale(0.6);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(1.4);
+        opacity: 0;
+    }
+}
+
+.thinking-header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.thinking-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.thinking-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #F1F5F9;
+    letter-spacing: -0.2px;
+}
+
+.thinking-badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(96, 165, 250, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%);
+    border: 1px solid rgba(147, 197, 253, 0.3);
+    color: #93C5FD;
+}
+
+.thinking-subtitle {
+    font-size: 12px;
+    color: #94A3B8;
+    line-height: 1.4;
+}
+
+/* Skeleton Loading Bars */
+.thinking-skeleton-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0 2px 0;
+}
+
+.thinking-skeleton-bar {
+    height: 6px;
+    border-radius: 6px;
+    background: linear-gradient(
+        90deg,
+        rgba(148, 163, 184, 0.1) 0%,
+        rgba(147, 197, 253, 0.25) 50%,
+        rgba(148, 163, 184, 0.1) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmerWave 2s infinite linear;
+}
+
+.thinking-skeleton-bar.bar-wide {
+    width: 85%;
+}
+
+.thinking-skeleton-bar.bar-medium {
+    width: 65%;
+}
+
+.thinking-skeleton-bar.bar-short {
+    width: 45%;
+}
+
+@keyframes shimmerWave {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Speed / Future Paid Models Notice Box */
+.thinking-speed-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.65) 0%, rgba(15, 23, 42, 0.65) 100%);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    margin-top: 2px;
+}
+
+.speed-note-icon {
+    font-size: 14px;
+    color: #FBBF24;
+    filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.4));
+    line-height: 1;
+    margin-top: 1px;
+}
+
+.speed-note-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.speed-note-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #E2E8F0;
+    letter-spacing: -0.1px;
+}
+
+.speed-note-desc {
+    font-size: 11px;
+    color: #94A3B8;
+    line-height: 1.45;
+}
+
 

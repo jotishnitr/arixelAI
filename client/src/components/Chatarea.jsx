@@ -801,6 +801,44 @@ export default function Chatarea({
                     }
                   >
                     {(() => {
+                      if (msg.role === "model" && msg.content === "Generating response...") {
+                        return (
+                          <div className="premium-thinking-card">
+                            <div className="thinking-card-header">
+                              <div className="thinking-orb">
+                                <span className="orb-center"></span>
+                                <span className="orb-wave"></span>
+                              </div>
+                              <div className="thinking-header-text">
+                                <div className="thinking-title-row">
+                                  <span className="thinking-title">ArixelCore-1o Synthesizing</span>
+                                  <span className="thinking-badge">AI Thinking</span>
+                                </div>
+                                <span className="thinking-subtitle">
+                                  Analyzing query context & formulating verified response...
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="thinking-skeleton-container">
+                              <div className="thinking-skeleton-bar bar-wide"></div>
+                              <div className="thinking-skeleton-bar bar-medium"></div>
+                              <div className="thinking-skeleton-bar bar-short"></div>
+                            </div>
+
+                            <div className="thinking-speed-note">
+                              <span className="speed-note-icon">⚡</span>
+                              <div className="speed-note-text">
+                                <span className="speed-note-title">Free-Tier Queue Active</span>
+                                <span className="speed-note-desc">
+                                  Responses are processed through our optimized free-tier multi-model pipeline. For lightning-fast, zero-wait generation, high-speed dedicated paid models will be integrated in future updates.
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
                       const contentStr = (msg.content || "").trim().replace(/^[`'"]+|[`'"]+$/g, "");
                       const isAudio = /^data:audio\//i.test(contentStr) || /^https?:\/\/.*\.(mp3|wav|ogg|m4a)(\?.*)?$/i.test(contentStr);
                       const isImage = /^data:image\//i.test(contentStr) || (/^https?:\/\/[^\s]+$/i.test(contentStr) && !isAudio);
