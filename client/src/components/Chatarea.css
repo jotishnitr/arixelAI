@@ -305,6 +305,7 @@
     border-top: 1px dashed rgba(208, 188, 255, 0.15);
     padding-top: 10px;
     margin-top: 4px;
+    gap: 12px;
 }
 
 .model-info {
@@ -312,6 +313,8 @@
     font-size: 12px;
     color: #CBC3D7;
     opacity: 0.65;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 /* Prompt Token Inspector in Input Footer */
@@ -319,6 +322,7 @@
     position: relative;
     display: flex;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .prompt-tokens-trigger-btn {
@@ -334,6 +338,8 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -356,6 +362,8 @@
     bottom: calc(100% + 10px);
     right: 0;
     width: 280px;
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
     background: rgba(18, 24, 38, 0.95);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -1245,12 +1253,23 @@
     }
 
     .chat-bubble {
-        max-width: 85% !important;
+        max-width: 88% !important;
+    }
+
+    .chat-bubble.thinking-bubble {
+        max-width: 100% !important;
+        width: 100%;
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        box-shadow: none !important;
     }
 
     .chat-input-wrapper {
         max-width: 100% !important;
-        margin: 0 10px;
+        margin: 0 auto;
+        width: 100%;
+        box-sizing: border-box;
     }
 }
 
@@ -2435,18 +2454,13 @@
    Token Optimizer Toggle & Info Popover
    ========================================================================== */
 
-.footer-left-group {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-}
-
 .token-optimizer-container {
     position: relative;
     display: flex;
     align-items: center;
     gap: 6px;
+    margin-right: auto;
+    margin-left: 14px;
 }
 
 .token-optimizer-toggle {
@@ -2552,6 +2566,8 @@
     bottom: calc(100% + 10px);
     left: 0;
     width: 320px;
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
     background: rgba(15, 23, 42, 0.96);
     border: 1px solid rgba(245, 158, 11, 0.3);
     border-radius: 12px;
@@ -2674,5 +2690,160 @@
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     padding-top: 8px;
 }
+
+/* ==========================================================================
+   Responsive Optimizations for Mobile & Small Devices
+   ========================================================================== */
+
+@media (max-width: 640px) {
+    .chat-content-area {
+        padding: 75px 12px 14px 12px !important;
+    }
+
+    .chat-messages-container {
+        padding: 0 4px;
+        gap: 16px;
+    }
+
+    .chat-bubble {
+        max-width: 90% !important;
+        padding: 12px 14px;
+    }
+
+    .chat-bubble.thinking-bubble {
+        max-width: 100% !important;
+        width: 100%;
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+
+    .chat-input-wrapper {
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box;
+    }
+
+    .chat-input-container {
+        padding: 12px 14px 10px 14px;
+        border-radius: 16px;
+        gap: 8px;
+    }
+
+    .input-row {
+        gap: 8px;
+    }
+
+    .input-footer-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+        align-items: center;
+        gap: 8px 10px;
+        padding-top: 8px;
+    }
+
+    .model-info {
+        grid-column: 1;
+        grid-row: 1;
+        font-size: 11px;
+    }
+
+    .prompt-token-bar-item {
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: end;
+    }
+
+    .prompt-tokens-trigger-btn {
+        font-size: 10.5px;
+        padding: 3px 8px;
+        white-space: nowrap;
+    }
+
+    .token-optimizer-container {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        margin-left: 0;
+        margin-right: 0;
+        padding-top: 6px;
+        border-top: 1px dashed rgba(208, 188, 255, 0.08);
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .token-optimizer-toggle {
+        padding: 3px 9px 3px 6px;
+    }
+
+    .optimizer-info-popover {
+        width: min(320px, calc(100vw - 32px));
+        max-width: calc(100vw - 32px);
+        left: 0;
+        right: auto;
+        box-sizing: border-box;
+    }
+
+    .prompt-tokens-popover {
+        width: min(290px, calc(100vw - 32px));
+        max-width: calc(100vw - 32px);
+        right: 0;
+        left: auto;
+        box-sizing: border-box;
+    }
+
+    .premium-thinking-card {
+        padding: 12px 14px;
+        gap: 10px;
+    }
+
+    .thinking-title {
+        font-size: 12.5px;
+    }
+
+    .thinking-subtitle {
+        font-size: 11px;
+    }
+
+    .thinking-speed-note {
+        padding: 8px 10px;
+        gap: 8px;
+    }
+
+    .speed-note-title {
+        font-size: 10.5px;
+    }
+
+    .speed-note-desc {
+        font-size: 10px;
+        line-height: 1.4;
+    }
+}
+
+@media (max-width: 380px) {
+    .prompt-tokens-trigger-btn {
+        font-size: 10px;
+        padding: 2.5px 6px;
+    }
+
+    .token-optimizer-toggle {
+        font-size: 10px;
+        padding: 2.5px 8px 2.5px 5px;
+    }
+
+    .optimizer-toggle-label {
+        font-size: 10px;
+    }
+
+    .optimizer-toggle-icon {
+        font-size: 10px;
+    }
+}
+
 
 

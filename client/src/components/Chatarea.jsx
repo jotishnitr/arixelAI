@@ -777,7 +777,9 @@ export default function Chatarea({
                   </div>
                 )}
                 <div
-                  className={`chat-bubble ${msg.role === "user" ? "user-bubble" : "ai-bubble"}`}
+                  className={`chat-bubble ${msg.role === "user" ? "user-bubble" : "ai-bubble"} ${
+                    msg.role === "model" && msg.content === "Generating response..." ? "thinking-bubble" : ""
+                  }`}
                 >
                   {msg.attachment && (
                     <div className="chat-attachment-preview">
@@ -1458,87 +1460,85 @@ export default function Chatarea({
             </button>
           </div>
           <div className="input-footer-row">
-            <div className="footer-left-group">
-              <div className="model-info">Model: Core-1o</div>
-              <div className="token-optimizer-container" ref={optimizerInfoRef}>
-                <label className={`token-optimizer-toggle ${isTokenOptimizer ? "active" : ""}`} title="Toggle Token Optimizer mode">
-                  <input
-                    type="checkbox"
-                    checked={isTokenOptimizer}
-                    onChange={(e) => setIsTokenOptimizer(e.target.checked)}
-                  />
-                  <span className="optimizer-toggle-slider"></span>
-                  <span className="optimizer-toggle-label">
-                    <span className="optimizer-toggle-icon">⚡</span> Token Optimizer
-                  </span>
-                </label>
-                <button
-                  type="button"
-                  className={`optimizer-info-btn ${showOptimizerInfo ? "active" : ""}`}
-                  onClick={() => setShowOptimizerInfo(!showOptimizerInfo)}
-                  aria-label="Token Optimizer Info"
-                  title="Learn about Token Optimizer trade-offs"
+            <div className="model-info">Model: Core-1o</div>
+            <div className="token-optimizer-container" ref={optimizerInfoRef}>
+              <label className={`token-optimizer-toggle ${isTokenOptimizer ? "active" : ""}`} title="Toggle Token Optimizer mode">
+                <input
+                  type="checkbox"
+                  checked={isTokenOptimizer}
+                  onChange={(e) => setIsTokenOptimizer(e.target.checked)}
+                />
+                <span className="optimizer-toggle-slider"></span>
+                <span className="optimizer-toggle-label">
+                  <span className="optimizer-toggle-icon">⚡</span> Token Optimizer
+                </span>
+              </label>
+              <button
+                type="button"
+                className={`optimizer-info-btn ${showOptimizerInfo ? "active" : ""}`}
+                onClick={() => setShowOptimizerInfo(!showOptimizerInfo)}
+                aria-label="Token Optimizer Info"
+                title="Learn about Token Optimizer trade-offs"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="16" x2="12" y2="12"></line>
-                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                  </svg>
-                </button>
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+              </button>
 
-                {showOptimizerInfo && (
-                  <div className="optimizer-info-popover">
-                    <div className="optimizer-popover-header">
-                      <div className="optimizer-popover-title">
-                        <span>⚡ Token Optimizer Mode</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="optimizer-popover-close"
-                        onClick={() => setShowOptimizerInfo(false)}
-                        title="Close info"
-                      >
-                        ×
-                      </button>
+              {showOptimizerInfo && (
+                <div className="optimizer-info-popover">
+                  <div className="optimizer-popover-header">
+                    <div className="optimizer-popover-title">
+                      <span>⚡ Token Optimizer Mode</span>
                     </div>
-
-                    <p className="optimizer-popover-desc">
-                      Activates a high-density, zero-entropy protocol to aggressively minimize output token consumption and protect your daily quotas.
-                    </p>
-
-                    <div className="optimizer-tradeoffs-box">
-                      <div className="tradeoffs-header">⚠️ Trade-offs & Style Changes:</div>
-                      <ul className="tradeoffs-list">
-                        <li>
-                          <strong>Less Grammatical / Telegraphic:</strong> Strips conversational filler, articles (a, an, the), and copulas (is, are).
-                        </li>
-                        <li>
-                          <strong>Zero Politeness:</strong> Eliminates greetings, preambles, and post-response pleasantries.
-                        </li>
-                        <li>
-                          <strong>Rigid Schema Format:</strong> Forces outputs into <code>State</code>, <code>Payload (Code)</code>, and <code>Caveat</code>.
-                        </li>
-                        <li>
-                          <strong>100% Code Integrity:</strong> Code blocks, scripts, and JSON remain fully functional and uncompressed.
-                        </li>
-                      </ul>
-                    </div>
-
-                    <div className="optimizer-popover-footer">
-                      💡 Recommended for rapid coding, error debugging, and conserving tokens.
-                    </div>
+                    <button
+                      type="button"
+                      className="optimizer-popover-close"
+                      onClick={() => setShowOptimizerInfo(false)}
+                      title="Close info"
+                    >
+                      ×
+                    </button>
                   </div>
-                )}
-              </div>
+
+                  <p className="optimizer-popover-desc">
+                    Activates a high-density, zero-entropy protocol to aggressively minimize output token consumption and protect your daily quotas.
+                  </p>
+
+                  <div className="optimizer-tradeoffs-box">
+                    <div className="tradeoffs-header">⚠️ Trade-offs & Style Changes:</div>
+                    <ul className="tradeoffs-list">
+                      <li>
+                        <strong>Less Grammatical / Telegraphic:</strong> Strips conversational filler, articles (a, an, the), and copulas (is, are).
+                      </li>
+                      <li>
+                        <strong>Zero Politeness:</strong> Eliminates greetings, preambles, and post-response pleasantries.
+                      </li>
+                      <li>
+                        <strong>Rigid Schema Format:</strong> Forces outputs into <code>State</code>, <code>Payload (Code)</code>, and <code>Caveat</code>.
+                      </li>
+                      <li>
+                        <strong>100% Code Integrity:</strong> Code blocks, scripts, and JSON remain fully functional and uncompressed.
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="optimizer-popover-footer">
+                    💡 Recommended for rapid coding, error debugging, and conserving tokens.
+                  </div>
+                </div>
+              )}
             </div>
             <div className="prompt-token-bar-item" ref={popoverRef}>
               <button
@@ -1559,10 +1559,10 @@ export default function Chatarea({
                 >
                   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                 </svg>
-                <span>
+                <span className="prompt-tokens-btn-text">
                   {chatInput.trim()
-                    ? `⚡ ~${totalEstimatedPromptTokens} tokens`
-                    : "⚡ Check Prompt Tokens"}
+                    ? `~${totalEstimatedPromptTokens} tokens`
+                    : "Check Prompt Tokens"}
                 </span>
               </button>
 
