@@ -121,6 +121,11 @@ export default function Chatarea({
   const [activePromptTokenIndex, setActivePromptTokenIndex] = useState(null);
   const popoverRef = useRef(null);
 
+  // Token Optimizer state
+  const [isTokenOptimizer, setIsTokenOptimizer] = useState(false);
+  const [showOptimizerInfo, setShowOptimizerInfo] = useState(false);
+  const optimizerInfoRef = useRef(null);
+
   // Copy to clipboard state & handler
   const [copiedId, setCopiedId] = useState(null);
 
@@ -166,20 +171,23 @@ export default function Chatarea({
     }
   };
 
-  // Click outside listener for token popover
+  // Click outside listener for token popover & optimizer info popover
   useEffect(() => {
     function handleClickOutside(event) {
       if (popoverRef.current && !popoverRef.current.contains(event.target)) {
         setShowPromptTokens(false);
       }
+      if (optimizerInfoRef.current && !optimizerInfoRef.current.contains(event.target)) {
+        setShowOptimizerInfo(false);
+      }
     }
-    if (showPromptTokens) {
+    if (showPromptTokens || showOptimizerInfo) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [showPromptTokens]);
+  }, [showPromptTokens, showOptimizerInfo]);
 
   const currentPromptTokens = chatInput.trim()
     ? Math.ceil(chatInput.trim().length / 3.8)
@@ -540,6 +548,7 @@ export default function Chatarea({
           context: isNewChat ? "" : context,
           attachment: attachmentObj,
           repo: attachedRepo,
+          tokenOptimizer: isTokenOptimizer,
         }),
       });
 
@@ -1449,7 +1458,88 @@ export default function Chatarea({
             </button>
           </div>
           <div className="input-footer-row">
-            <div className="model-info">Model: Core-1o</div>
+            <div className="footer-left-group">
+              <div className="model-info">Model: Core-1o</div>
+              <div className="token-optimizer-container" ref={optimizerInfoRef}>
+                <label className={`token-optimizer-toggle ${isTokenOptimizer ? "active" : ""}`} title="Toggle Token Optimizer mode">
+                  <input
+                    type="checkbox"
+                    checked={isTokenOptimizer}
+                    onChange={(e) => setIsTokenOptimizer(e.target.checked)}
+                  />
+                  <span className="optimizer-toggle-slider"></span>
+                  <span className="optimizer-toggle-label">
+                    <span className="optimizer-toggle-icon">⚡</span> Token Optimizer
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  className={`optimizer-info-btn ${showOptimizerInfo ? "active" : ""}`}
+                  onClick={() => setShowOptimizerInfo(!showOptimizerInfo)}
+                  aria-label="Token Optimizer Info"
+                  title="Learn about Token Optimizer trade-offs"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                  </svg>
+                </button>
+
+                {showOptimizerInfo && (
+                  <div className="optimizer-info-popover">
+                    <div className="optimizer-popover-header">
+                      <div className="optimizer-popover-title">
+                        <span>⚡ Token Optimizer Mode</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="optimizer-popover-close"
+                        onClick={() => setShowOptimizerInfo(false)}
+                        title="Close info"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <p className="optimizer-popover-desc">
+                      Activates a high-density, zero-entropy protocol to aggressively minimize output token consumption and protect your daily quotas.
+                    </p>
+
+                    <div className="optimizer-tradeoffs-box">
+                      <div className="tradeoffs-header">⚠️ Trade-offs & Style Changes:</div>
+                      <ul className="tradeoffs-list">
+                        <li>
+                          <strong>Less Grammatical / Telegraphic:</strong> Strips conversational filler, articles (a, an, the), and copulas (is, are).
+                        </li>
+                        <li>
+                          <strong>Zero Politeness:</strong> Eliminates greetings, preambles, and post-response pleasantries.
+                        </li>
+                        <li>
+                          <strong>Rigid Schema Format:</strong> Forces outputs into <code>State</code>, <code>Payload (Code)</code>, and <code>Caveat</code>.
+                        </li>
+                        <li>
+                          <strong>100% Code Integrity:</strong> Code blocks, scripts, and JSON remain fully functional and uncompressed.
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="optimizer-popover-footer">
+                      💡 Recommended for rapid coding, error debugging, and conserving tokens.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="prompt-token-bar-item" ref={popoverRef}>
               <button
                 type="button"

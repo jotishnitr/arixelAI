@@ -741,6 +741,7 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
     req.enrichedText = enrichedText;
     req.attachment = attachment;
     req.repo = repo;
+    req.tokenOptimizer = Boolean(req.body.tokenOptimizer);
 
     return next();
   } catch (err) {

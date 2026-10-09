@@ -24,12 +24,49 @@ RESPONSE GUIDELINES:
 Contact / Feedback:
 - For bugs, feedback, or support, direct users to: arixelai.noreply@gmail.com`;
 
+const TOKEN_OPTIMIZER_PROTOCOL = `<system_protocol>
+## OBJECTIVE
+You are a high-density, zero-entropy technical core. Your single mandate is to minimize completion_tokens while maintaining maximum technical accuracy. 
+
+<behavior_constraints>
+- STRIP LINGUISTIC FILLER: Eliminate all greetings, preambles, transitional phrases, explanations of what you are about to do, summaries, and post-response polite suggestions.
+- TELEGRAPHIC STYLE: Write exclusively in broken, keyword-dense English. Strip articles (a, an, the), copulas (is, are, was, am), and auxiliary verbs. 
+- NO HEDGING: Never use passive or uncertain phrases ("It appears", "Maybe try", "I think"). State engineering states as absolute facts.
+- THINKING TOKENS: If using a reasoning model (like OpenAI o1 or DeepSeek R1), do not let brevity stop your hidden internal reasoning. Only compress the FINAL visible output.
+</behavior_constraints>
+
+<data_integrity_safeguards>
+- CRITICAL: Never apply linguistic compression to structured data. 
+- Code blocks, JSON objects, YAML configurations, regex patterns, file paths, variables, and markdown tables must remain completely unaltered, syntactically perfect, and fully functional.
+</data_integrity_safeguards>
+
+<response_schema>
+Format all engineering and code outputs using this rigid structural sequence:
+State: [1-5 keyword phrase describing the problem/status]
+Payload: [The raw code block, schema, or terminal command]
+Caveat: [Under 5 words pointing out a critical edge-case or dependency, if any]
+</response_schema>
+
+<few_shot_examples>
+Input: "Can you review this python code and tell me why it's slow?"
+Output:
+State: O(N^2) complexity. Nested loop bottleneck.
+Payload:
+\`\`\`python
+# Optimized approach using dictionary lookup: O(N)
+seen = set(lookup_list)
+result = [x for x in target_list if x in seen]
+\`\`\`
+Caveat: High memory usage trade-off.
+</few_shot_examples>
+</system_protocol>`;
+
 /**
  * Formats chat history and current user message for OpenAI-compatible providers (Cerebras, Groq, OpenRouter).
  */
-function buildOpenAiMessages(historyMessages, currentPrompt) {
+function buildOpenAiMessages(historyMessages, currentPrompt, systemPrompt = SYSTEM_PROMPT) {
   const formatted = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt },
     ...(historyMessages || []).map((msg) => ({
       role: msg.role === "model" ? "assistant" : "user",
       content: msg.content || "",
@@ -213,12 +250,22 @@ const handleChatResponse = async (req, res) => {
       }
     }
 
+    // Check if token optimizer mode is requested by user
+    const isTokenOptimizer = Boolean(req.tokenOptimizer || req.body.tokenOptimizer);
+    const activeSystemPrompt = isTokenOptimizer
+      ? `${SYSTEM_PROMPT}\n\n${TOKEN_OPTIMIZER_PROTOCOL}`
+      : SYSTEM_PROMPT;
+
     // 3. Prepare payload messages for the providers
-    const openAiMessages = buildOpenAiMessages(historyMessages, enrichedPrompt);
+    const openAiMessages = buildOpenAiMessages(historyMessages, enrichedPrompt, activeSystemPrompt);
     const geminiContents = buildGeminiContents(historyMessages, enrichedPrompt, attachment, docText);
 
     // Calculate required tokens for rate limiting (TPM)
-    const estimatedTokens = tokenCounter.calculateRequiredTokens(enrichedPrompt, historyMessages, 1200);
+    const estimatedTokens = tokenCounter.calculateRequiredTokens(
+      enrichedPrompt,
+      historyMessages,
+      isTokenOptimizer ? 450 : 1200
+    );
 
     let finalResponse = null;
     let successfulModel = null;
@@ -254,7 +301,7 @@ const handleChatResponse = async (req, res) => {
                 model: modelId,
                 contents: geminiContents,
                 config: {
-                  systemInstruction: SYSTEM_PROMPT,
+                  systemInstruction: activeSystemPrompt,
                 },
               });
               return result?.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -381,7 +428,7 @@ const handleChatResponse = async (req, res) => {
                 const result = await gemini.models.generateContent({
                   model: modelId,
                   contents: geminiContents,
-                  config: { systemInstruction: SYSTEM_PROMPT },
+                  config: { systemInstruction: activeSystemPrompt },
                 });
                 return result?.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
               }
