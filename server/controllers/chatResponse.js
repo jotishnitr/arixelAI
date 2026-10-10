@@ -419,6 +419,7 @@ const handleChatResponse = async (req, res) => {
     let lastError = null;
     let fileAttachment = null;
     let multiModelTaskResults = null;
+    let instructionModelUsed = null;
 
     // =========================================================================
     // BRANCH A: MULTI-MODEL PARALLEL EXECUTION PIPELINE
@@ -580,7 +581,7 @@ ${r.code}
 
       // Generate Run Instructions using the candidate model chain
       let runInstructions = "";
-      let instructionModelUsed = null;
+      instructionModelUsed = null;
 
       const runInstructionsPrompt = `You are ArixelCore-1o. The multi-model execution engine has generated code for the following components:
 ${taskResults.map((r) => `- Component: "${r.task}" (preview: ${r.code.slice(0, 300).replace(/\n/g, " ")}...)`).join("\n")}
