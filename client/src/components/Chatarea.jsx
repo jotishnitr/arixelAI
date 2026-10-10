@@ -799,6 +799,18 @@ export default function Chatarea({
                           <span className="file-name">
                             {msg.attachment.name}
                           </span>
+                          {msg.attachment?.base64 && (
+                            <a
+                              href={`data:${msg.attachment.mimeType || "text/plain"};base64,${msg.attachment.base64}`}
+                              download={msg.attachment.name || "download.txt"}
+                              className="chat-attached-download-btn"
+                              title="Download attached file"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              📥 Download
+                            </a>
+                          )}
                         </div>
                       )}
                     </div>

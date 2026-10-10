@@ -169,10 +169,127 @@ function resolveModelForProvider(modelId, provider) {
 }
 
 /**
+ * Helper to execute a model request through executeWithModelQueue across supported providers.
+ */
+async function executeModelCall({
+  modelId,
+  provider,
+  promptText,
+  openAiMessages,
+  geminiContents,
+  activeSystemPrompt,
+  estimatedTokens,
+}) {
+  return await executeWithModelQueue({
+    model: modelId,
+    provider,
+    estimatedTokens,
+    fn: async () => {
+      if (provider === "gemini") {
+        const result = await gemini.models.generateContent({
+          model: modelId,
+          contents: geminiContents,
+          config: {
+            systemInstruction: activeSystemPrompt,
+          },
+        });
+        return result?.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      }
+
+      if (provider === "sdxl" || provider === "ovh") {
+        const cleanPrompt = (promptText || "")
+          .replace(/^(generate|create|draw|make|render)\s+(an?\s+)?(image|picture|photo|illustration|drawing|portrait|wallpaper)\s+(of\s+|containing\s+)?/i, "")
+          .trim() || promptText;
+
+        const res = await fetch("https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/images/generations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "stable-diffusion-xl-base-v10",
+            prompt: cleanPrompt,
+            n: 1,
+            size: "1024x1024",
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const b64 = data.data?.[0]?.b64_json;
+          if (b64) {
+            return `data:image/png;base64,${b64}`;
+          }
+          const url = data.data?.[0]?.url;
+          if (url) return url;
+        }
+        throw new Error(`SDXL generation failed with status ${res.status}`);
+      }
+
+      if (provider === "pollinations") {
+        const cleanPrompt = (promptText || "")
+          .replace(/^(generate|create|draw|make|render)\s+(an?\s+)?(image|picture|photo|illustration|drawing|portrait|wallpaper)\s+(of\s+|containing\s+)?/i, "")
+          .trim() || promptText;
+        const encoded = encodeURIComponent(cleanPrompt);
+        return `https://image.pollinations.ai/prompt/${encoded}`;
+      }
+
+      if (provider === "groq") {
+        const completion = await groq.chat.completions.create({
+          model: modelId,
+          messages: openAiMessages,
+        });
+        return completion.choices?.[0]?.message?.content || "";
+      }
+
+      if (provider === "openrouter") {
+        if (modelId === "fish-audio/s2.1-pro-free:free" || modelId.includes("fish-audio")) {
+          let cleanInput = (promptText || "")
+            .replace(/^(generate|create|synthesize|make|produce)\s+(an?\s+)?(audio|speech|voice|sound)(\s+file)?(\s+(on|for|of|with|saying|reading))?(\s+this\s+text)?\s*[:"']?/i, "")
+            .replace(/^(speak|read\s+out\s+loud|text\s+to\s+speech)\s*[:"']?\s*/i, "")
+            .trim();
+
+          cleanInput = cleanInput.replace(/^["'`]+|["'`]+$/g, "").trim() || promptText;
+
+          console.log(`[chatResponse] Calling OpenRouter TTS endpoint with model [${modelId}]...`);
+          const ttsRes = await fetch("https://openrouter.ai/api/v1/audio/speech", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: modelId,
+              input: cleanInput,
+              response_format: "mp3",
+            }),
+          });
+
+          if (!ttsRes.ok) {
+            const errText = await ttsRes.text();
+            throw new Error(`OpenRouter audio/speech failed (${ttsRes.status}): ${errText}`);
+          }
+
+          const arrayBuffer = await ttsRes.arrayBuffer();
+          const base64Audio = Buffer.from(arrayBuffer).toString("base64");
+          return `data:audio/mp3;base64,${base64Audio}`;
+        }
+
+        const completion = await openrouter.chat.completions.create({
+          model: modelId,
+          messages: openAiMessages,
+        });
+        return completion.choices?.[0]?.message?.content || "";
+      }
+
+      throw new Error(`Unsupported provider: ${provider}`);
+    },
+  });
+}
+
+/**
  * Main controller to execute model completion from candidate selectedModels.
  */
 const handleChatResponse = async (req, res) => {
-  const selectedModels = req.selectedModels || req.body.selectedModels || [];
+  const rawSelectedModels = req.selectedModels || req.body.selectedModels || null;
   const promptText = req.userMessage || req.body.userMessage || req.body.message || req.body.text || "";
   const attachment = req.attachment !== undefined ? req.attachment : req.body.attachment;
   const repo = req.repo !== undefined ? req.repo : req.body.repo;
@@ -185,8 +302,31 @@ const handleChatResponse = async (req, res) => {
     return res.status(400).json({ message: "User message or attachment is required" });
   }
 
-  // Validate that candidate models were supplied
-  if (!selectedModels || !Array.isArray(selectedModels) || selectedModels.length === 0) {
+  // Normalize selectedModels format (support object with isMultiModelTask & tasksDetailArray, or raw array)
+  let isMultiModel = false;
+  let tasksDetailArray = [];
+  let candidateModels = [];
+
+  if (rawSelectedModels) {
+    if (Array.isArray(rawSelectedModels)) {
+      candidateModels = rawSelectedModels;
+    } else if (typeof rawSelectedModels === "object") {
+      isMultiModel = Boolean(rawSelectedModels.isMultiModelTask);
+      tasksDetailArray = Array.isArray(rawSelectedModels.tasksDetailArray)
+        ? rawSelectedModels.tasksDetailArray
+        : [];
+      candidateModels = Array.isArray(rawSelectedModels.models)
+        ? rawSelectedModels.models
+        : [];
+
+      if (isMultiModel && tasksDetailArray.length === 0) {
+        isMultiModel = false;
+      }
+    }
+  }
+
+  // Validate that candidate models or task arrays were supplied
+  if (!isMultiModel && (!candidateModels || candidateModels.length === 0)) {
     return res.status(400).json({
       message: "No available models could be selected for this task. Please verify your token limits and try again.",
     });
@@ -267,210 +407,522 @@ const handleChatResponse = async (req, res) => {
       isTokenOptimizer ? 450 : 1200
     );
 
+    const emergencyFallbacks = [
+      { modelId: "openai/gpt-oss-120b", provider: "groq" },
+      { modelId: "inclusionai/ling-3.0-flash-sante:free", provider: "openrouter" },
+      { modelId: "gemini-3.5-flash-lite", provider: "gemini" },
+    ];
+
     let finalResponse = null;
     let successfulModel = null;
+    let actualTokens = 0;
     let lastError = null;
+    let fileAttachment = null;
+    let multiModelTaskResults = null;
 
-    // 4. Deduplicate candidate models so no model is repeated in the response loop
-    const seen = new Set();
-    const uniqueCandidates = [];
-    for (const item of selectedModels) {
-      const rawModelId = typeof item === "string" ? item : item.model;
-      const provider = ((typeof item === "object" ? item.provider : "") || "gemini").toLowerCase();
-      if (!rawModelId) continue;
-      const modelId = resolveModelForProvider(rawModelId, provider);
-      const key = `${provider}:${modelId}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniqueCandidates.push({ rawModelId, modelId, provider });
-      }
-    }
+    // =========================================================================
+    // BRANCH A: MULTI-MODEL PARALLEL EXECUTION PIPELINE
+    // =========================================================================
+    if (isMultiModel) {
+      console.log(`[chatResponse] Executing MULTI-MODEL task with ${tasksDetailArray.length} parallel chains...`);
 
-    // Iterate over unique selected models in priority order, protected by modelQueue (RPM & TPM)
-    for (const { modelId, provider } of uniqueCandidates) {
-      try {
-        console.log(`[chatResponse] Calling ${provider} [${modelId}] via modelQueue...`);
+      const parallelTaskPromises = tasksDetailArray.map(async (taskItem, index) => {
+        const taskName = taskItem.task || `Module ${index + 1}`;
+        const taskInstruction = taskItem.instruction || "";
+        const rawModels = taskItem.models || [];
 
-        const responseText = await executeWithModelQueue({
-          model: modelId,
-          provider,
-          estimatedTokens,
-          fn: async () => {
-            if (provider === "gemini") {
-              const result = await gemini.models.generateContent({
-                model: modelId,
-                contents: geminiContents,
-                config: {
-                  systemInstruction: activeSystemPrompt,
-                },
-              });
-              return result?.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            }
-
-            if (provider === "sdxl" || provider === "ovh") {
-              const cleanPrompt = (promptText || "")
-                .replace(/^(generate|create|draw|make|render)\s+(an?\s+)?(image|picture|photo|illustration|drawing|portrait|wallpaper)\s+(of\s+|containing\s+)?/i, "")
-                .trim() || promptText;
-
-              const res = await fetch("https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/images/generations", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  model: "stable-diffusion-xl-base-v10",
-                  prompt: cleanPrompt,
-                  n: 1,
-                  size: "1024x1024",
-                }),
-              });
-
-              if (res.ok) {
-                const data = await res.json();
-                const b64 = data.data?.[0]?.b64_json;
-                if (b64) {
-                  return `data:image/png;base64,${b64}`;
-                }
-                const url = data.data?.[0]?.url;
-                if (url) return url;
-              }
-              throw new Error(`SDXL generation failed with status ${res.status}`);
-            }
-
-            if (provider === "pollinations") {
-              const cleanPrompt = (promptText || "")
-                .replace(/^(generate|create|draw|make|render)\s+(an?\s+)?(image|picture|photo|illustration|drawing|portrait|wallpaper)\s+(of\s+|containing\s+)?/i, "")
-                .trim() || promptText;
-              const encoded = encodeURIComponent(cleanPrompt);
-              return `https://image.pollinations.ai/prompt/${encoded}`;
-            }
-
-            if (provider === "groq") {
-              const completion = await groq.chat.completions.create({
-                model: modelId,
-                messages: openAiMessages,
-              });
-              return completion.choices?.[0]?.message?.content || "";
-            }
-
-            if (provider === "openrouter") {
-              if (modelId === "fish-audio/s2.1-pro-free:free" || modelId.includes("fish-audio")) {
-                let cleanInput = (promptText || "")
-                  .replace(/^(generate|create|synthesize|make|produce)\s+(an?\s+)?(audio|speech|voice|sound)(\s+file)?(\s+(on|for|of|with|saying|reading))?(\s+this\s+text)?\s*[:"']?/i, "")
-                  .replace(/^(speak|read\s+out\s+loud|text\s+to\s+speech)\s*[:"']?\s*/i, "")
-                  .trim();
-
-                // Remove outer surrounding quotes if present
-                cleanInput = cleanInput.replace(/^["'`]+|["'`]+$/g, "").trim() || promptText;
-
-                console.log(`[chatResponse] Calling OpenRouter TTS endpoint with model [${modelId}]...`);
-                const ttsRes = await fetch("https://openrouter.ai/api/v1/audio/speech", {
-                  method: "POST",
-                  headers: {
-                    "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    model: modelId,
-                    input: cleanInput,
-                    response_format: "mp3",
-                  }),
-                });
-
-                if (!ttsRes.ok) {
-                  const errText = await ttsRes.text();
-                  throw new Error(`OpenRouter audio/speech failed (${ttsRes.status}): ${errText}`);
-                }
-
-                const arrayBuffer = await ttsRes.arrayBuffer();
-                const base64Audio = Buffer.from(arrayBuffer).toString("base64");
-                return `data:audio/mp3;base64,${base64Audio}`;
-              }
-
-              const completion = await openrouter.chat.completions.create({
-                model: modelId,
-                messages: openAiMessages,
-              });
-              return completion.choices?.[0]?.message?.content || "";
-            }
-
-            throw new Error(`Unsupported provider: ${provider}`);
-          },
-        });
-
-        if (responseText) {
-          finalResponse = responseText;
-          successfulModel = { model: modelId, provider };
-          console.log(`[chatResponse] Successfully generated response with ${provider} [${modelId}]`);
-          break;
+        // Build candidate list for this specific task
+        const taskCandidates = [];
+        const seenInTask = new Set();
+        for (const item of rawModels) {
+          const rawModelId = typeof item === "string" ? item : (item.model || item.modelId);
+          const provider = ((typeof item === "object" ? item.provider : "") || "gemini").toLowerCase();
+          if (!rawModelId) continue;
+          const modelId = resolveModelForProvider(rawModelId, provider);
+          const key = `${provider}:${modelId}`;
+          if (!seenInTask.has(key)) {
+            seenInTask.add(key);
+            taskCandidates.push({ modelId, provider });
+          }
         }
-      } catch (err) {
-        console.warn(`[chatResponse] Model ${provider} [${modelId}] failed: ${err.message}. Trying next fallback...`);
-        lastError = err;
+
+        // Append emergency fallbacks to this task's chain
+        for (const em of emergencyFallbacks) {
+          const key = `${em.provider}:${em.modelId}`;
+          if (!seenInTask.has(key)) {
+            seenInTask.add(key);
+            taskCandidates.push(em);
+          }
+        }
+
+        // Specialized prompt for this component chain
+        const subtaskPrompt = `You are a specialized AI software engineer responsible for building the "${taskName}" component of the following project.
+
+OVERALL PROJECT REQUIREMENTS:
+${enrichedPrompt}
+
+YOUR ASSIGNED COMPONENT:
+Component Name: ${taskName}
+${taskInstruction ? `Component Focus & Instructions: ${taskInstruction}` : ""}
+
+CRITICAL REQUIREMENTS:
+1. Provide the COMPLETE, PRODUCTION-READY, FULLY FUNCTIONAL code for this specific component (${taskName}).
+2. Do not use placeholders, "TODO" comments, or truncated snippets (...). Implement all logic completely.
+3. Clearly label each file with its exact relative filepath using comments or headers, for example:
+   // File: src/components/${taskName}.jsx
+   or
+   # File: server/routes/${taskName}.js
+4. Include all necessary dependencies, imports, functions, exports, handlers, and configurations required for this component.`;
+
+        const subtaskOpenAiMessages = buildOpenAiMessages(historyMessages, subtaskPrompt, activeSystemPrompt);
+        const subtaskGeminiContents = buildGeminiContents(historyMessages, subtaskPrompt, attachment, docText);
+        const subtaskEstimatedTokens = tokenCounter.calculateRequiredTokens(subtaskPrompt, historyMessages, 1200);
+
+        let taskContent = "";
+        let taskModelUsed = null;
+
+        for (const { modelId, provider } of taskCandidates) {
+          try {
+            console.log(`[chatResponse][Task: ${taskName}] Calling ${provider} [${modelId}] via modelQueue...`);
+            const resText = await executeModelCall({
+              modelId,
+              provider,
+              promptText: subtaskPrompt,
+              openAiMessages: subtaskOpenAiMessages,
+              geminiContents: subtaskGeminiContents,
+              activeSystemPrompt,
+              estimatedTokens: subtaskEstimatedTokens,
+            });
+
+            if (resText && resText.trim()) {
+              taskContent = resText.trim();
+              taskModelUsed = { model: modelId, provider };
+              console.log(`[chatResponse][Task: ${taskName}] Successfully generated code with ${provider} [${modelId}]`);
+              break;
+            }
+          } catch (taskErr) {
+            console.warn(`[chatResponse][Task: ${taskName}] Model ${provider} [${modelId}] failed: ${taskErr.message}. Trying next fallback...`);
+          }
+        }
+
+        return {
+          task: taskName,
+          instruction: taskInstruction,
+          code: taskContent || `// ${taskName}: Code generation could not be completed due to upstream rate limits.`,
+          modelUsed: taskModelUsed || { model: "emergency-fallback", provider: "none" },
+          success: Boolean(taskContent),
+        };
+      });
+
+      // AWAIT ALL CHAINS IN PARALLEL
+      const taskResults = await Promise.all(parallelTaskPromises);
+      multiModelTaskResults = taskResults;
+
+      // Consolidate the whole code into a single structured file
+      const projectSlug = (context || "project-solution")
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "") || "project-solution";
+
+      const gatheredFileName = `${projectSlug}-complete-code.txt`;
+
+      const gatheredFileContent = `================================================================================
+ARIXEL AI - MULTI-MODEL DISTRIBUTED PROJECT SOLUTION
+Project Context: ${context || "Full-Stack Application"}
+Generated: ${new Date().toUTCString()}
+Architecture: Distributed Multi-Model Parallel Pipeline
+Components Built:
+${taskResults.map((r, i) => `  ${i + 1}. [${r.task}] via ${r.modelUsed?.provider} [${r.modelUsed?.model}]`).join("\n")}
+================================================================================
+
+${taskResults.map((r) => `
+################################################################################
+# COMPONENT / MODULE: ${r.task.toUpperCase()}
+# Generated by: ${r.modelUsed?.provider} [${r.modelUsed?.model}]
+################################################################################
+
+${r.code}
+`).join("\n\n")}`;
+
+      const gatheredFileBase64 = Buffer.from(gatheredFileContent, "utf-8").toString("base64");
+      fileAttachment = {
+        name: gatheredFileName,
+        mimeType: "text/plain",
+        base64: gatheredFileBase64,
+      };
+
+      // Build candidate fallback chain for generating Run Instructions from modelSelector
+      const rawRunInstModels = rawSelectedModels?.runInstructionModels || [];
+      const instructionCandidates = [];
+      const seenInst = new Set();
+
+      for (const item of rawRunInstModels) {
+        const rawModelId = typeof item === "string" ? item : (item.model || item.modelId);
+        const provider = ((typeof item === "object" ? item.provider : "") || "gemini").toLowerCase();
+        if (!rawModelId) continue;
+        const modelId = resolveModelForProvider(rawModelId, provider);
+        const key = `${provider}:${modelId}`;
+        if (!seenInst.has(key)) {
+          seenInst.add(key);
+          instructionCandidates.push({ modelId, provider });
+        }
+      }
+
+      // Append emergency multi-provider fallbacks to ensure extreme resilience
+      for (const em of emergencyFallbacks) {
+        const key = `${em.provider}:${em.modelId}`;
+        if (!seenInst.has(key)) {
+          seenInst.add(key);
+          instructionCandidates.push(em);
+        }
+      }
+
+      // Generate Run Instructions using the candidate model chain
+      let runInstructions = "";
+      let instructionModelUsed = null;
+
+      const runInstructionsPrompt = `You are ArixelCore-1o. The multi-model execution engine has generated code for the following components:
+${taskResults.map((r) => `- Component: "${r.task}" (preview: ${r.code.slice(0, 300).replace(/\n/g, " ")}...)`).join("\n")}
+
+USER REQUEST:
+${enrichedPrompt}
+
+Provide a comprehensive, professional guide on HOW TO RUN THIS PROJECT.
+Include:
+1. Prerequisites (e.g. Node.js version, database setup, environment)
+2. Project Setup & File Extraction (explain how to structure the files from the attached bundle "${gatheredFileName}")
+3. Installing Dependencies (exact terminal commands)
+4. Environment Variables configuration (.env template)
+5. Commands to Run (Development server, Backend server, Database connection)
+6. Testing & Verifying the Application (URLs to open, endpoints to test)
+
+Format with clean Markdown headings, bullet points, and code blocks.`;
+
+      const instOpenAi = buildOpenAiMessages([], runInstructionsPrompt, activeSystemPrompt);
+      const instGemini = buildGeminiContents([], runInstructionsPrompt);
+
+      for (const { modelId, provider } of instructionCandidates) {
+        try {
+          console.log(`[chatResponse][Run Instructions] Calling ${provider} [${modelId}] via modelQueue...`);
+          const resText = await executeModelCall({
+            modelId,
+            provider,
+            promptText: runInstructionsPrompt,
+            openAiMessages: instOpenAi,
+            geminiContents: instGemini,
+            activeSystemPrompt,
+            estimatedTokens: 800,
+          });
+
+          if (resText && resText.trim()) {
+            runInstructions = resText.trim();
+            instructionModelUsed = { model: modelId, provider };
+            console.log(`[chatResponse][Run Instructions] Successfully generated instructions with ${provider} [${modelId}]`);
+            break;
+          }
+        } catch (instErr) {
+          console.warn(`[chatResponse][Run Instructions] Model ${provider} [${modelId}] failed: ${instErr.message}. Trying next fallback...`);
+        }
+      }
+
+      // Deduct token usage for instruction synthesis model if executed
+      if (instructionModelUsed && runInstructions) {
+        const instToks = tokenCounter.estimateTokens(runInstructions) + 120;
+        actualTokens += instToks;
+
+        if (dbUserId && instructionModelUsed.provider !== "none") {
+          try {
+            const prov = instructionModelUsed.provider.toLowerCase();
+            const providerFieldMap = {
+              gemini: "dailyGeminiTokenUsed",
+              groq: "dailyGroqTokenUsed",
+              openrouter: "dailyOpenRouterTokenUsed",
+            };
+            const updateFields = {
+              $inc: {
+                dailyTotalTokensUsed: instToks,
+                lifetimeTotalTokensUsed: instToks,
+              },
+            };
+            if (providerFieldMap[prov]) {
+              updateFields.$inc[providerFieldMap[prov]] = instToks;
+            }
+            const schemaModelsMap = {
+              gemini: "geminiModels",
+              groq: "groqModels",
+              openrouter: "openRouterModels",
+            };
+            const modelsArrayKey = schemaModelsMap[prov] || `${prov}Models`;
+            const updateResult = await User.updateOne(
+              { _id: dbUserId, [`${modelsArrayKey}.model`]: instructionModelUsed.model },
+              {
+                ...updateFields,
+                $inc: {
+                  ...updateFields.$inc,
+                  [`${modelsArrayKey}.$.dailyTokensUsed`]: instToks,
+                  [`${modelsArrayKey}.$.totalTokensUsed`]: instToks,
+                },
+              }
+            );
+            if (updateResult.matchedCount === 0) {
+              await User.updateOne({ _id: dbUserId }, updateFields);
+            }
+          } catch (tokErr) {
+            console.warn("[chatResponse] Failed to update token count for instructions model:", tokErr.message);
+          }
+        }
+      }
+
+      if (!runInstructions || !runInstructions.trim()) {
+        runInstructions = `### 📋 How to Run This Project
+
+1. **Prerequisites**:
+   - Ensure Node.js (v18+ or v20+) and your database (e.g., MongoDB, PostgreSQL) are installed.
+2. **Extract Files**:
+   - Open the attached bundle file \`${gatheredFileName}\`.
+   - Create the corresponding project directories and paste each file into its indicated path.
+3. **Install Dependencies**:
+   \`\`\`bash
+   npm install
+   \`\`\`
+4. **Environment Configuration**:
+   - Create a \`.env\` file in the project root with the required environment variables (e.g. \`PORT=5000\`, database URI, secret keys).
+5. **Start the Application**:
+   \`\`\`bash
+   npm run dev
+   # or
+   node server.js
+   \`\`\`
+6. **Verification**:
+   - Open \`http://localhost:3000\` or \`http://localhost:5000\` in your browser to verify the application is live.`;
+      }
+
+      finalResponse = `## 🚀 Multi-Model Project Architecture
+
+Your application was built in parallel across **${taskResults.length} specialized model chains**:
+
+${taskResults.map((r) => `- **${r.task}**: Generated by \`${r.modelUsed?.model}\` (${r.modelUsed?.provider})`).join("\n")}
+${instructionModelUsed ? `- **Run Instructions**: Synthesized by \`${instructionModelUsed.model}\` (${instructionModelUsed.provider})` : ""}
+
+📦 **All source code files have been consolidated into the attached file: \`${gatheredFileName}\`.** You can download it directly from the chat attachment.
+
+---
+
+## 🛠️ Step-by-Step Instructions: How to Run the Project
+
+${runInstructions}
+
+---
+
+### 📦 Consolidated File Summary
+All generated source files are gathered in **\`${gatheredFileName}\`**. Open the attachment above to inspect or download the full project code.`;
+
+      successfulModel = {
+        model: "Multi-Model Ensemble",
+        provider: "Distributed Chains",
+      };
+
+      // Calculate tokens used and update tokens in database for each model used
+      for (const r of taskResults) {
+        const taskToks = tokenCounter.estimateTokens(r.code) + 150;
+        actualTokens += taskToks;
+
+        if (dbUserId && r.modelUsed && r.modelUsed.provider !== "none") {
+          try {
+            const prov = r.modelUsed.provider.toLowerCase();
+            const providerFieldMap = {
+              gemini: "dailyGeminiTokenUsed",
+              groq: "dailyGroqTokenUsed",
+              openrouter: "dailyOpenRouterTokenUsed",
+            };
+            const updateFields = {
+              $inc: {
+                dailyTotalTokensUsed: taskToks,
+                lifetimeTotalTokensUsed: taskToks,
+              },
+            };
+            if (providerFieldMap[prov]) {
+              updateFields.$inc[providerFieldMap[prov]] = taskToks;
+            }
+            const schemaModelsMap = {
+              gemini: "geminiModels",
+              groq: "groqModels",
+              openrouter: "openRouterModels",
+            };
+            const modelsArrayKey = schemaModelsMap[prov] || `${prov}Models`;
+            const updateResult = await User.updateOne(
+              { _id: dbUserId, [`${modelsArrayKey}.model`]: r.modelUsed.model },
+              {
+                ...updateFields,
+                $inc: {
+                  ...updateFields.$inc,
+                  [`${modelsArrayKey}.$.dailyTokensUsed`]: taskToks,
+                  [`${modelsArrayKey}.$.totalTokensUsed`]: taskToks,
+                },
+              }
+            );
+            if (updateResult.matchedCount === 0) {
+              await User.updateOne({ _id: dbUserId }, updateFields);
+            }
+          } catch (tokErr) {
+            console.warn("[chatResponse] Failed to update token count for subtask model:", tokErr.message);
+          }
+        }
       }
     }
 
-    // Safety net: If candidate models failed (due to upstream 503 or transient outage), try emergency multi-provider fallbacks
-    if (!finalResponse) {
-      const emergencyFallbacks = [
-        { modelId: "openai/gpt-oss-120b", provider: "groq" },
-        { modelId: "inclusionai/ling-3.0-flash-sante:free", provider: "openrouter" },
-        { modelId: "gemini-3.5-flash-lite", provider: "gemini" },
-      ];
+    // =========================================================================
+    // BRANCH B: SINGLE-MODEL SEQUENTIAL FALLBACK EXECUTION
+    // =========================================================================
+    else {
+      // 4. Deduplicate candidate models so no model is repeated in the response loop
+      const seen = new Set();
+      const uniqueCandidates = [];
+      for (const item of candidateModels) {
+        const rawModelId = typeof item === "string" ? item : (item.model || item.modelId);
+        const provider = ((typeof item === "object" ? item.provider : "") || "gemini").toLowerCase();
+        if (!rawModelId) continue;
+        const modelId = resolveModelForProvider(rawModelId, provider);
+        const key = `${provider}:${modelId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueCandidates.push({ rawModelId, modelId, provider });
+        }
+      }
 
-      for (const { modelId, provider } of emergencyFallbacks) {
+      // Iterate over unique selected models in priority order, protected by modelQueue (RPM & TPM)
+      for (const { modelId, provider } of uniqueCandidates) {
         try {
-          console.log(`[chatResponse] Attempting emergency safety fallback with ${provider} [${modelId}]...`);
-          const responseText = await executeWithModelQueue({
-            model: modelId,
+          console.log(`[chatResponse] Calling ${provider} [${modelId}] via modelQueue...`);
+
+          const responseText = await executeModelCall({
+            modelId,
             provider,
+            promptText,
+            openAiMessages,
+            geminiContents,
+            activeSystemPrompt,
             estimatedTokens,
-            fn: async () => {
-              if (provider === "gemini") {
-                const result = await gemini.models.generateContent({
-                  model: modelId,
-                  contents: geminiContents,
-                  config: { systemInstruction: activeSystemPrompt },
-                });
-                return result?.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-              }
-              if (provider === "groq") {
-                const completion = await groq.chat.completions.create({
-                  model: modelId,
-                  messages: openAiMessages,
-                });
-                return completion.choices?.[0]?.message?.content || "";
-              }
-              if (provider === "openrouter") {
-                const completion = await openrouter.chat.completions.create({
-                  model: modelId,
-                  messages: openAiMessages,
-                });
-                return completion.choices?.[0]?.message?.content || "";
-              }
-              return "";
-            },
           });
 
           if (responseText) {
             finalResponse = responseText;
             successfulModel = { model: modelId, provider };
-            console.log(`[chatResponse] Emergency fallback succeeded with ${provider} [${modelId}]`);
+            console.log(`[chatResponse] Successfully generated response with ${provider} [${modelId}]`);
             break;
           }
-        } catch (emErr) {
-          console.warn(`[chatResponse] Emergency fallback ${provider} [${modelId}] failed:`, emErr.message);
+        } catch (err) {
+          console.warn(`[chatResponse] Model ${provider} [${modelId}] failed: ${err.message}. Trying next fallback...`);
+          lastError = err;
+        }
+      }
+
+      // Safety net: If candidate models failed (due to upstream 503 or transient outage), try emergency multi-provider fallbacks
+      if (!finalResponse) {
+        for (const { modelId, provider } of emergencyFallbacks) {
+          try {
+            console.log(`[chatResponse] Attempting emergency safety fallback with ${provider} [${modelId}]...`);
+            const responseText = await executeModelCall({
+              modelId,
+              provider,
+              promptText,
+              openAiMessages,
+              geminiContents,
+              activeSystemPrompt,
+              estimatedTokens,
+            });
+
+            if (responseText) {
+              finalResponse = responseText;
+              successfulModel = { model: modelId, provider };
+              console.log(`[chatResponse] Emergency fallback succeeded with ${provider} [${modelId}]`);
+              break;
+            }
+          } catch (emErr) {
+            console.warn(`[chatResponse] Emergency fallback ${provider} [${modelId}] failed:`, emErr.message);
+          }
+        }
+      }
+
+      if (!finalResponse) {
+        return res.status(503).json({
+          message:
+            "I apologize, but all AI models are currently experiencing high demand or temporary downtime. Please wait a moment and try sending your message again.",
+          error: lastError ? lastError.message : "All candidate models failed to respond",
+        });
+      }
+
+      const isImageProvider =
+        successfulModel?.provider === "pollinations" ||
+        successfulModel?.provider === "sdxl" ||
+        successfulModel?.provider === "ovh";
+
+      const isAudioModel = Boolean(
+        successfulModel?.model &&
+        (successfulModel.model.includes("fish-audio") || successfulModel.model.includes("tts"))
+      );
+
+      // Calculate estimated actual tokens for this exchange
+      if (isAudioModel) {
+        const promptTokens = tokenCounter.estimateTokens(enrichedPrompt || promptText);
+        actualTokens = Math.max(60, promptTokens + Math.ceil(promptTokens * 0.5) + 30);
+      } else if (!isImageProvider) {
+        actualTokens = tokenCounter.estimateTokens(finalResponse) + tokenCounter.estimateTokens(enrichedPrompt);
+      }
+
+      // Update user's token usage in database
+      if (dbUserId && successfulModel && !isImageProvider && actualTokens > 0) {
+        try {
+          const providerFieldMap = {
+            gemini: "dailyGeminiTokenUsed",
+            groq: "dailyGroqTokenUsed",
+            openrouter: "dailyOpenRouterTokenUsed",
+          };
+
+          const updateFields = {
+            $inc: {
+              dailyTotalTokensUsed: actualTokens,
+              lifetimeTotalTokensUsed: actualTokens,
+            },
+          };
+
+          const providerDailyField = providerFieldMap[successfulModel.provider];
+          if (providerDailyField) {
+            updateFields.$inc[providerDailyField] = actualTokens;
+          }
+
+          const schemaModelsMap = {
+            gemini: "geminiModels",
+            groq: "groqModels",
+            openrouter: "openRouterModels",
+          };
+          const modelsArrayKey = schemaModelsMap[successfulModel.provider] || `${successfulModel.provider}Models`;
+
+          const updateResult = await User.updateOne(
+            { _id: dbUserId, [`${modelsArrayKey}.model`]: successfulModel.model },
+            {
+              ...updateFields,
+              $inc: {
+                ...updateFields.$inc,
+                [`${modelsArrayKey}.$.dailyTokensUsed`]: actualTokens,
+                [`${modelsArrayKey}.$.totalTokensUsed`]: actualTokens,
+              },
+            }
+          );
+
+          if (updateResult.matchedCount === 0) {
+            await User.updateOne({ _id: dbUserId }, updateFields);
+          }
+        } catch (tokenErr) {
+          console.warn("[chatResponse] Failed to update user token counters:", tokenErr.message);
         }
       }
     }
 
-    if (!finalResponse) {
-      return res.status(503).json({
-        message:
-          "I apologize, but all AI models are currently experiencing high demand or temporary downtime. Please wait a moment and try sending your message again.",
-        error: lastError ? lastError.message : "All candidate models failed to respond",
-      });
-    }
-
+    // =========================================================================
     // 5. Store conversation & model response in the database
+    // =========================================================================
     if (!chat) {
       chat = await Chat.findOne({ userId, context });
       if (!chat) {
@@ -493,32 +945,13 @@ const handleChatResponse = async (req, res) => {
       });
     }
 
-    const isImageProvider =
-      successfulModel?.provider === "pollinations" ||
-      successfulModel?.provider === "sdxl" ||
-      successfulModel?.provider === "ovh";
-
-    const isAudioModel = Boolean(
-      successfulModel?.model &&
-      (successfulModel.model.includes("fish-audio") || successfulModel.model.includes("tts"))
-    );
-
-    // Calculate estimated actual tokens for this exchange
-    let actualTokens = 0;
-    if (isAudioModel) {
-      // Audio speech generation: calculate based on input prompt plus speech synthesis overhead
-      const promptTokens = tokenCounter.estimateTokens(enrichedPrompt || promptText);
-      actualTokens = Math.max(60, promptTokens + Math.ceil(promptTokens * 0.5) + 30);
-    } else if (!isImageProvider) {
-      actualTokens = tokenCounter.estimateTokens(finalResponse) + tokenCounter.estimateTokens(enrichedPrompt);
-    }
-
-    // Push the model's response with token and model metadata
+    // Push the model's response with token, model metadata, and attachment if file was generated
     chat.messages.push({
       role: "model",
       content: finalResponse,
       tokensUsed: actualTokens,
       modelUsed: successfulModel,
+      ...(fileAttachment ? { attachment: fileAttachment } : {}),
     });
 
     // Clean up any historical messages that might have oversized raw base64 from earlier requests
@@ -532,57 +965,9 @@ const handleChatResponse = async (req, res) => {
 
     await chat.save();
 
-    // 6. Update user's token usage in database
-    if (dbUserId && successfulModel && !isImageProvider && actualTokens > 0) {
-      try {
-        const providerFieldMap = {
-          gemini: "dailyGeminiTokenUsed",
-          groq: "dailyGroqTokenUsed",
-          openrouter: "dailyOpenRouterTokenUsed",
-        };
-
-        const updateFields = {
-          $inc: {
-            dailyTotalTokensUsed: actualTokens,
-            lifetimeTotalTokensUsed: actualTokens,
-          },
-        };
-
-        const providerDailyField = providerFieldMap[successfulModel.provider];
-        if (providerDailyField) {
-          updateFields.$inc[providerDailyField] = actualTokens;
-        }
-
-        // Correct schema array mapping (openRouterModels has camelCase 'R')
-        const schemaModelsMap = {
-          gemini: "geminiModels",
-          groq: "groqModels",
-          openrouter: "openRouterModels",
-        };
-        const modelsArrayKey = schemaModelsMap[successfulModel.provider] || `${successfulModel.provider}Models`;
-
-        const updateResult = await User.updateOne(
-          { _id: dbUserId, [`${modelsArrayKey}.model`]: successfulModel.model },
-          {
-            ...updateFields,
-            $inc: {
-              ...updateFields.$inc,
-              [`${modelsArrayKey}.$.dailyTokensUsed`]: actualTokens,
-              [`${modelsArrayKey}.$.totalTokensUsed`]: actualTokens,
-            },
-          }
-        );
-
-        // If exact model was not in the array, still update the user's daily totals
-        if (updateResult.matchedCount === 0) {
-          await User.updateOne({ _id: dbUserId }, updateFields);
-        }
-      } catch (tokenErr) {
-        console.warn("[chatResponse] Failed to update user token counters:", tokenErr.message);
-      }
-    }
-
-    // 7. Send final response to frontend
+    // =========================================================================
+    // 6. Send final response to frontend
+    // =========================================================================
     return res.status(200).json({
       message: "Chat response generated successfully",
       response: finalResponse,
@@ -590,6 +975,10 @@ const handleChatResponse = async (req, res) => {
       tokensUsed: actualTokens,
       context: chat.context,
       messages: chat.messages,
+      isMultiModelTask: isMultiModel,
+      tasksDetailArray: multiModelTaskResults || [],
+      runInstructionModel: instructionModelUsed,
+      file: fileAttachment,
     });
   } catch (err) {
     console.error("Error in handleChatResponse:", err);

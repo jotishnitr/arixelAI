@@ -1353,6 +1353,30 @@
     white-space: nowrap;
 }
 
+.chat-attached-download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #4ade80;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 6px;
+    margin-left: 6px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.chat-attached-download-btn:hover {
+    background: rgba(74, 222, 128, 0.2);
+    border-color: rgba(74, 222, 128, 0.4);
+    color: #86efac;
+    transform: translateY(-1px);
+}
+
 /* Choice Dropdown Styling */
 .choice-dropdown-wrapper {
     position: relative;

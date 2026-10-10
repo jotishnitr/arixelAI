@@ -85,58 +85,72 @@ MODEL SELECTION
 11. Token availability is a HARD constraint, not a preference.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MULTI-MODEL TASK BREAKDOWN (isMultiModelTask)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. DETERMINE IF MULTI-MODEL:
+   - Set isMultiModelTask = true ONLY for complex, multi-component tasks (e.g. Full-Stack Applications, large multi-module systems comprising Frontend/UI, Backend/API, Database, AI Services, Deployment/DevOps).
+   - Set isMultiModelTask = false for all single questions, specific algorithms, bug fixes, reasoning tasks, single scripts, essays, image generation, or audio synthesis.
+
+2. IF isMultiModelTask = true:
+   - Divide the larger complex task into 2 to 4 distinct, cohesive subtasks (e.g. "Frontend / UI", "Backend / API", "Database & Models", "Deployment & Scripts").
+   - For EACH subtask in tasksDetailArray, specify:
+     - "task": The clear name of the component (e.g. "Frontend / UI", "Backend / API")
+     - "instruction": Specific, actionable focus instructions for what code/files to produce for that component
+     - "models": A fallback chain of 2 to 4 eligible models ranked by suitability:
+       [ { "model": "exact-model-id", "provider": "exact-provider-name" }, ... ]
+   - Diversify model providers across the subtasks (e.g. Gemini for UI, Groq for Backend, OpenRouter for Database).
+   - In "runInstructionModels", select a dedicated fallback chain of 3 to 4 fast models across different providers (Gemini, Groq, OpenRouter) with high remaining tokens, prioritizing models/providers not already heavily loaded by the subtasks to prevent rate-limit contention and model ties.
+
+3. IF isMultiModelTask = false:
+   - Leave tasksDetailArray as an empty array: []
+   - Leave runInstructionModels as an empty array: []
+   - In "models", provide a diversified fallback chain of at least 7-8 models from highest to lowest suitability across Gemini, Groq, and OpenRouter.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FALLBACK
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 If no suitable specialized model has enough tokens:
-
 1. Find familiar general-purpose models in AVAILABLE_MODELS across Gemini, Groq, and OpenRouter.
 2. Verify that their providers have at least REQUIRED_TOKENS remaining.
 3. Select them as fallbacks at the END of the returned array.
 
-The fallback must never be preferred over a suitable task-specific model.
-
-If no model has enough remaining tokens:
-
-Return:
-
-[]
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PRIORITY & ORDERING
+OUTPUT SCHEMA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Return a diversified chain of at least 7-8 models in this order:
+Return ONLY a valid JSON object. Do NOT wrap in markdown fences, do NOT include explanations, comments, or extra text.
 
-1. Top 1-2 best task-specific models (primary models matching the prompt category)
-2. 2-3 strong alternative models from different providers (including 2-3 OpenRouter models for diversity)
-3. 2-3 fast general-purpose fallback models at the end of the chain
-
-Every returned model must satisfy:
-
-providerRemainingTokens >= REQUIRED_TOKENS
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Return ONLY a valid JSON array.
-
-Each item MUST contain exactly:
-
+Required JSON Structure:
 {
-  "model": "exact-model-id",
-  "provider": "exact-provider-name"
+  "isMultiModelTask": boolean,
+  "tasksDetailArray": [
+    {
+      "task": "Component Name",
+      "instruction": "Specific instructions for this component",
+      "models": [
+        { "model": "exact-model-id", "provider": "exact-provider-name" }
+      ]
+    }
+  ],
+  "runInstructionModels": [
+    { "model": "exact-model-id", "provider": "exact-provider-name" }
+  ],
+  "models": [
+    { "model": "exact-model-id", "provider": "exact-provider-name" }
+  ]
 }
 
-Do not return explanations, scores, reasons, categories, token information, or any additional fields.
+If no eligible model exists across all providers, return:
+{
+  "isMultiModelTask": false,
+  "tasksDetailArray": [],
+  "runInstructionModels": [],
+  "models": []
+}
 
-If no eligible model exists, return:
-
-[]
-
-Do not execute the user's task.
-Only perform model selection.`;
+Do not execute the user's task. Only perform model selection and task breakdown.`;
 
 // Model selection list: Verified fast free Gemini models, Groq models, and active OpenRouter free models
 const MODEL_SELECTION_MODELS = [
@@ -189,6 +203,50 @@ const generateTitle = (text) => {
   return words.length > 0 ? words : "New Conversation";
 };
 
+// Helper to normalize model entry
+function normalizeModelItem(item) {
+  if (!item) return null;
+  if (typeof item === "string") {
+    const m = item.trim();
+    const mapEntry = MODEL_EXECUTION_MAP[m];
+    let provider = mapEntry?.provider || "gemini";
+    if (!mapEntry) {
+      if (m.includes("gpt-oss")) provider = "groq";
+      else if (m.includes("/") || m.includes("nemotron") || m.includes("gemma") || m.includes("fish-audio")) provider = "openrouter";
+      else if (m.includes("gemini")) provider = "gemini";
+    }
+    return { model: m, provider };
+  }
+  if (typeof item === "object") {
+    const rawId = item.model || item.modelId || "";
+    let provider = (item.provider || "").toLowerCase();
+    if (!provider && rawId) {
+      if (rawId.includes("gpt-oss")) provider = "groq";
+      else if (rawId.includes("/") || rawId.includes("nemotron") || rawId.includes("gemma") || rawId.includes("fish-audio")) provider = "openrouter";
+      else provider = "gemini";
+    }
+    return rawId ? { model: rawId, provider } : null;
+  }
+  return null;
+}
+
+function normalizeModelList(list) {
+  if (!Array.isArray(list)) return [];
+  const res = [];
+  const seen = new Set();
+  for (const item of list) {
+    const norm = normalizeModelItem(item);
+    if (norm && norm.model && norm.provider) {
+      const key = `${norm.provider}:${norm.model}`.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        res.push(norm);
+      }
+    }
+  }
+  return res;
+}
+
 // Robust JSON parser for selection model output
 function parseSelectionOutput(rawText) {
   if (!rawText) return null;
@@ -198,9 +256,70 @@ function parseSelectionOutput(rawText) {
       clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
     }
     const parsed = JSON.parse(clean);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    if (parsed && Array.isArray(parsed.models) && parsed.models.length > 0) return parsed.models;
-    if (parsed && Array.isArray(parsed.selectedModels) && parsed.selectedModels.length > 0) return parsed.selectedModels;
+
+    // If output is a raw array of models (legacy/fallback format)
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return {
+        isMultiModelTask: false,
+        tasksDetailArray: [],
+        models: normalizeModelList(parsed),
+      };
+    }
+
+    // If output is an object with isMultiModelTask and/or tasksDetailArray
+    if (parsed && typeof parsed === "object") {
+      const isMulti = Boolean(parsed.isMultiModelTask);
+      let tasks = [];
+      if (Array.isArray(parsed.tasksDetailArray) && parsed.tasksDetailArray.length > 0) {
+        tasks = parsed.tasksDetailArray
+          .map((t) => ({
+            task: t.task || t.name || "Module",
+            instruction: t.instruction || t.description || "",
+            models: normalizeModelList(t.models),
+          }))
+          .filter((t) => t.models.length > 0);
+      }
+
+      const generalModels = normalizeModelList(parsed.models || parsed.selectedModels || []);
+      const instructionModels = normalizeModelList(
+        parsed.runInstructionModels || parsed.instructionModels || parsed.instructionsModels || []
+      );
+
+      if (isMulti && tasks.length > 0) {
+        // Collect model keys already tied to subtasks to prioritize untied models
+        const subtaskModelKeys = new Set();
+        for (const t of tasks) {
+          for (const m of (t.models || [])) {
+            subtaskModelKeys.add(`${m.provider}:${m.model}`.toLowerCase());
+          }
+        }
+
+        // Prefer models selected by the AI selection engine for instructions
+        // If omitted by the AI, dynamically use general models that are NOT tied to subtasks
+        let dynamicInstructionChain = instructionModels;
+        if (dynamicInstructionChain.length === 0) {
+          const untiedGeneral = generalModels.filter(
+            (m) => !subtaskModelKeys.has(`${m.provider}:${m.model}`.toLowerCase())
+          );
+          dynamicInstructionChain = untiedGeneral.length > 0 ? untiedGeneral : generalModels;
+        }
+
+        return {
+          isMultiModelTask: true,
+          tasksDetailArray: tasks,
+          runInstructionModels: dynamicInstructionChain.length > 0 ? dynamicInstructionChain : (tasks[0]?.models || []),
+          models: generalModels.length > 0 ? generalModels : (tasks[0]?.models || []),
+        };
+      }
+
+      if (generalModels.length > 0) {
+        return {
+          isMultiModelTask: false,
+          tasksDetailArray: [],
+          models: generalModels,
+        };
+      }
+    }
   } catch (err) { }
   return null;
 }
@@ -277,19 +396,27 @@ function heuristicModelSelection(promptText, userCurrentTokens, requiredTokens, 
 
   // Immediate handling for image generation
   if (category === "image") {
-    return [
-      { model: "stable-diffusion-xl-base-v10", provider: "sdxl" },
-      { model: "flux", provider: "pollinations" },
-      { model: "flux-realism", provider: "pollinations" },
-      { model: "turbo", provider: "pollinations" },
-    ];
+    return {
+      isMultiModelTask: false,
+      tasksDetailArray: [],
+      models: [
+        { model: "stable-diffusion-xl-base-v10", provider: "sdxl" },
+        { model: "flux", provider: "pollinations" },
+        { model: "flux-realism", provider: "pollinations" },
+        { model: "turbo", provider: "pollinations" },
+      ],
+    };
   }
 
   // Immediate handling for audio / text-to-speech generation
   if (category === "tts" || category === "audio_music") {
-    return [
-      { model: "fish-audio/s2.1-pro-free:free", provider: "openrouter" },
-    ];
+    return {
+      isMultiModelTask: false,
+      tasksDetailArray: [],
+      models: [
+        { model: "fish-audio/s2.1-pro-free:free", provider: "openrouter" },
+      ],
+    };
   }
 
   // 3. Step A: Pick top task-specific models from the detected category
@@ -337,7 +464,73 @@ function heuristicModelSelection(promptText, userCurrentTokens, requiredTokens, 
     addModel(m.model, m.provider);
   }
 
-  return selected;
+  // Check if prompt requests a complex multi-tier / full-stack task
+  const isComplexMultiPart =
+    /\b(full[- ]?stack|mern|mean|frontend\s+(and|&)\s+backend|backend\s+(and|&)\s+frontend|ui\s+(and|&)\s+backend|database\s+(and|&)\s+backend|entire\s+app|complete\s+(web\s*)?app|architecture)\b/i.test(text);
+
+  if (isComplexMultiPart) {
+    const multiTasks = [
+      {
+        task: "Frontend / UI",
+        instruction: "Build the complete, responsive client components, state management, UI, and styling.",
+        models: [
+          { model: "gemini-3.5-flash", provider: "gemini" },
+          { model: "openai/gpt-oss-120b", provider: "groq" },
+          { model: "gemini-3.5-flash-lite", provider: "gemini" },
+        ].filter((m) => isEligible(m.provider)),
+      },
+      {
+        task: "Backend / API",
+        instruction: "Build the complete server endpoints, routes, controllers, middleware, and business logic.",
+        models: [
+          { model: "openai/gpt-oss-120b", provider: "groq" },
+          { model: "gemini-3.5-flash", provider: "gemini" },
+          { model: "google/gemma-4-31b-it:free", provider: "openrouter" },
+        ].filter((m) => isEligible(m.provider)),
+      },
+      {
+        task: "Database & Models",
+        instruction: "Build the database schemas, models, seed scripts, and configuration.",
+        models: [
+          { model: "gemini-3.5-flash-lite", provider: "gemini" },
+          { model: "openai/gpt-oss-20b", provider: "groq" },
+          { model: "nvidia/nemotron-3.5-lightning:free", provider: "openrouter" },
+        ].filter((m) => isEligible(m.provider)),
+      },
+      {
+        task: "Deployment & Scripts",
+        instruction: "Build package.json scripts, environment configuration (.env.example), and start scripts.",
+        models: [
+          { model: "gemini-3.5-flash-lite", provider: "gemini" },
+          { model: "openai/gpt-oss-120b", provider: "groq" },
+        ].filter((m) => isEligible(m.provider)),
+      },
+    ].filter((t) => t.models.length > 0);
+
+    if (multiTasks.length >= 2) {
+      // Prioritize eligible models from selected that are not already tied to the first subtasks
+      const usedInFirstTasks = new Set(
+        (multiTasks[0]?.models || []).concat(multiTasks[1]?.models || []).map((m) => `${m.provider}:${m.model}`.toLowerCase())
+      );
+      const untiedHeuristic = selected.filter(
+        (m) => !usedInFirstTasks.has(`${m.provider}:${m.model}`.toLowerCase())
+      );
+      const runInstructionChain = untiedHeuristic.length > 0 ? untiedHeuristic : selected;
+
+      return {
+        isMultiModelTask: true,
+        tasksDetailArray: multiTasks,
+        runInstructionModels: runInstructionChain,
+        models: selected.length > 0 ? selected : multiTasks[0].models,
+      };
+    }
+  }
+
+  return {
+    isMultiModelTask: false,
+    tasksDetailArray: [],
+    models: selected,
+  };
 }
 
 const postChat = async (req, res, next) => {
@@ -563,10 +756,14 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
       /^\s*(picture|photo|image|drawing|illustration)\s+of\b/i.test(enrichedText || text || "");
 
     if (isImageIntent) {
-      selectedModels = [
-        { model: "stable-diffusion-xl-base-v10", provider: "sdxl" },
-        { model: "flux", provider: "pollinations" },
-      ];
+      selectedModels = {
+        isMultiModelTask: false,
+        tasksDetailArray: [],
+        models: [
+          { model: "stable-diffusion-xl-base-v10", provider: "sdxl" },
+          { model: "flux", provider: "pollinations" },
+        ],
+      };
       console.log("[modelSelector] Image generation intent detected. Direct routing to free image models [SDXL, Pollinations].");
     }
 
@@ -576,142 +773,161 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
       !/\b(code|python|react|javascript|bug|fix|function|database|sql)\b/i.test(enrichedText || text || "");
 
     if (isAudioIntent && !selectedModels) {
-      selectedModels = [
-        { model: "fish-audio/s2.1-pro-free:free", provider: "openrouter" },
-      ];
+      selectedModels = {
+        isMultiModelTask: false,
+        tasksDetailArray: [],
+        models: [
+          { model: "fish-audio/s2.1-pro-free:free", provider: "openrouter" },
+        ],
+      };
       console.log("[modelSelector] Audio/TTS intent detected. Direct routing to [fish-audio/s2.1-pro-free:free].");
     }
 
     if (!selectedModels) {
       for (const selection_model of MODEL_SELECTION_MODELS) {
-      // Check if user has sufficient tokens for this selection model call
-      const modelTokens = tokenChecker(selection_model, userCurrentTokens, selectionCheckTokens);
-      const mapping = MODEL_EXECUTION_MAP[selection_model];
-      const provider = (mapping?.provider || modelTokens.model?.provider || "").toLowerCase();
-      const executeModelName = mapping?.actualModel || selection_model;
+        // Check if user has sufficient tokens for this selection model call
+        const modelTokens = tokenChecker(selection_model, userCurrentTokens, selectionCheckTokens);
+        const mapping = MODEL_EXECUTION_MAP[selection_model];
+        const provider = (mapping?.provider || modelTokens.model?.provider || "").toLowerCase();
+        const executeModelName = mapping?.actualModel || selection_model;
 
-      // Allow if model tokens sufficient or provider has remaining capacity
-      const providerHasTokens = provider === "gemini"
-        ? (user.dailyGeminiTokenCapacity || 10000) - (user.dailyGeminiTokenUsed || 0) >= selectionCheckTokens
-        : provider === "openrouter"
-        ? (user.dailyOpenRouterTokenCapacity || 5000) - (user.dailyOpenRouterTokenUsed || 0) >= selectionCheckTokens
-        : provider === "groq"
-        ? (user.dailyGroqTokenCapacity || 10000) - (user.dailyGroqTokenUsed || 0) >= selectionCheckTokens
-        : true;
+        // Allow if model tokens sufficient or provider has remaining capacity
+        const providerHasTokens = provider === "gemini"
+          ? (user.dailyGeminiTokenCapacity || 10000) - (user.dailyGeminiTokenUsed || 0) >= selectionCheckTokens
+          : provider === "openrouter"
+            ? (user.dailyOpenRouterTokenCapacity || 5000) - (user.dailyOpenRouterTokenUsed || 0) >= selectionCheckTokens
+            : provider === "groq"
+              ? (user.dailyGroqTokenCapacity || 10000) - (user.dailyGroqTokenUsed || 0) >= selectionCheckTokens
+              : true;
 
-      if ((modelTokens.has_sufficient_tokens && modelTokens.model) || providerHasTokens) {
+        if ((modelTokens.has_sufficient_tokens && modelTokens.model) || providerHasTokens) {
 
-        try {
-          const result = await executeWithModelQueue({
-            model: executeModelName,
-            provider,
-            estimatedTokens: selectionCheckTokens,
-            fn: async () => {
-              if (provider === "gemini") {
-                const response = await gemini.models.generateContent({
-                  model: executeModelName,
-                  contents: [{ role: "user", parts: [{ text: selectionInputPayload }] }],
-                  config: {
-                    systemInstruction: Model_selection_prompt,
-                    responseMimeType: "application/json",
-                  },
-                });
-                return parseSelectionOutput(response?.text);
-              } else if (provider === "groq") {
-                const completion = await groq.chat.completions.create({
-                  model: executeModelName,
-                  messages: [
-                    { role: "system", content: Model_selection_prompt },
-                    { role: "user", content: selectionInputPayload },
-                  ],
-                  response_format: { type: "json_object" },
-                });
-                return parseSelectionOutput(completion.choices?.[0]?.message?.content);
-              } else if (provider === "openrouter") {
-                const completion = await openrouter.chat.completions.create({
-                  model: executeModelName,
-                  messages: [
-                    { role: "system", content: Model_selection_prompt },
-                    { role: "user", content: selectionInputPayload },
-                  ],
-                });
-                return parseSelectionOutput(completion.choices?.[0]?.message?.content);
-              }
-              return null;
-            },
-          });
-
-          if (result && Array.isArray(result) && result.length > 0) {
-            selectedModels = result;
-            console.log(`[modelSelector] Model selection succeeded with ${provider} [${selection_model}]:`, selectedModels);
-
-            // Deduct / update user's token usage for running the selection model
-            if (dbUserId) {
-              try {
-                // Measure fair selection overhead for user prompt (not charging massive internal prompt)
-                const selectionTokensUsed = Math.min(
-                  250,
-                  tokenCounter.estimateTokens(text) + 100
-                );
-
-                const providerFieldMap = {
-                  gemini: "dailyGeminiTokenUsed",
-                  groq: "dailyGroqTokenUsed",
-                  openrouter: "dailyOpenRouterTokenUsed",
-                };
-
-                const updateQuery = {
-                  $inc: {
-                    dailyTotalTokensUsed: selectionTokensUsed,
-                    lifetimeTotalTokensUsed: selectionTokensUsed,
-                  },
-                };
-
-                const providerDailyField = providerFieldMap[provider];
-                if (providerDailyField) {
-                  updateQuery.$inc[providerDailyField] = selectionTokensUsed;
-                }
-
-                // Correct schema array mapping (openRouterModels has camelCase 'R')
-                const schemaModelsMap = {
-                  gemini: "geminiModels",
-                  groq: "groqModels",
-                  openrouter: "openRouterModels",
-                };
-                const modelsArrayKey = schemaModelsMap[provider] || `${provider}Models`;
-
-                const updateResult = await User.updateOne(
-                  { _id: dbUserId, [`${modelsArrayKey}.model`]: modelTokens.model.model },
-                  {
-                    ...updateQuery,
-                    $inc: {
-                      ...updateQuery.$inc,
-                      [`${modelsArrayKey}.$.dailyTokensUsed`]: selectionTokensUsed,
-                      [`${modelsArrayKey}.$.totalTokensUsed`]: selectionTokensUsed,
+          try {
+            const result = await executeWithModelQueue({
+              model: executeModelName,
+              provider,
+              estimatedTokens: selectionCheckTokens,
+              fn: async () => {
+                if (provider === "gemini") {
+                  const response = await gemini.models.generateContent({
+                    model: executeModelName,
+                    contents: [{ role: "user", parts: [{ text: selectionInputPayload }] }],
+                    config: {
+                      systemInstruction: Model_selection_prompt,
+                      responseMimeType: "application/json",
                     },
-                  }
-                );
-
-                if (updateResult.matchedCount === 0) {
-                  await User.updateOne({ _id: dbUserId }, updateQuery);
+                  });
+                  return parseSelectionOutput(response?.text);
+                } else if (provider === "groq") {
+                  const completion = await groq.chat.completions.create({
+                    model: executeModelName,
+                    messages: [
+                      { role: "system", content: Model_selection_prompt },
+                      { role: "user", content: selectionInputPayload },
+                    ],
+                    response_format: { type: "json_object" },
+                  });
+                  return parseSelectionOutput(completion.choices?.[0]?.message?.content);
+                } else if (provider === "openrouter") {
+                  const completion = await openrouter.chat.completions.create({
+                    model: executeModelName,
+                    messages: [
+                      { role: "system", content: Model_selection_prompt },
+                      { role: "user", content: selectionInputPayload },
+                    ],
+                  });
+                  return parseSelectionOutput(completion.choices?.[0]?.message?.content);
                 }
-                console.log(`[modelSelector] Updated user tokens (+${selectionTokensUsed}) for selection model [${selection_model}]`);
-              } catch (tokenErr) {
-                console.warn("[modelSelector] Failed to update user tokens for selection step:", tokenErr.message);
-              }
-            }
+                return null;
+              },
+            });
 
-            break;
+            if (
+              result &&
+              typeof result === "object" &&
+              (
+                (result.isMultiModelTask && Array.isArray(result.tasksDetailArray) && result.tasksDetailArray.length > 0) ||
+                (Array.isArray(result.models) && result.models.length > 0)
+              )
+            ) {
+              selectedModels = result;
+              console.log(`[modelSelector] Model selection succeeded with ${provider} [${selection_model}]:`, selectedModels);
+
+              // Deduct / update user's token usage for running the selection model
+              if (dbUserId) {
+                try {
+                  // Measure fair selection overhead for user prompt (not charging massive internal prompt)
+                  const selectionTokensUsed = Math.min(
+                    250,
+                    tokenCounter.estimateTokens(text) + 100
+                  );
+
+                  const providerFieldMap = {
+                    gemini: "dailyGeminiTokenUsed",
+                    groq: "dailyGroqTokenUsed",
+                    openrouter: "dailyOpenRouterTokenUsed",
+                  };
+
+                  const updateQuery = {
+                    $inc: {
+                      dailyTotalTokensUsed: selectionTokensUsed,
+                      lifetimeTotalTokensUsed: selectionTokensUsed,
+                    },
+                  };
+
+                  const providerDailyField = providerFieldMap[provider];
+                  if (providerDailyField) {
+                    updateQuery.$inc[providerDailyField] = selectionTokensUsed;
+                  }
+
+                  // Correct schema array mapping (openRouterModels has camelCase 'R')
+                  const schemaModelsMap = {
+                    gemini: "geminiModels",
+                    groq: "groqModels",
+                    openrouter: "openRouterModels",
+                  };
+                  const modelsArrayKey = schemaModelsMap[provider] || `${provider}Models`;
+
+                  const updateResult = await User.updateOne(
+                    { _id: dbUserId, [`${modelsArrayKey}.model`]: modelTokens.model.model },
+                    {
+                      ...updateQuery,
+                      $inc: {
+                        ...updateQuery.$inc,
+                        [`${modelsArrayKey}.$.dailyTokensUsed`]: selectionTokensUsed,
+                        [`${modelsArrayKey}.$.totalTokensUsed`]: selectionTokensUsed,
+                      },
+                    }
+                  );
+
+                  if (updateResult.matchedCount === 0) {
+                    await User.updateOne({ _id: dbUserId }, updateQuery);
+                  }
+                  console.log(`[modelSelector] Updated user tokens (+${selectionTokensUsed}) for selection model [${selection_model}]`);
+                } catch (tokenErr) {
+                  console.warn("[modelSelector] Failed to update user tokens for selection step:", tokenErr.message);
+                }
+              }
+
+              break;
+            }
+          } catch (err) {
+            console.warn(`[modelSelector] Selection model [${selection_model}] failed: ${err.message}. Trying next fallback...`);
           }
-        } catch (err) {
-          console.warn(`[modelSelector] Selection model [${selection_model}] failed: ${err.message}. Trying next fallback...`);
         }
       }
     }
-  }
 
     // Fallback: If AI selection models are down, rate limited, or fail, execute intelligent heuristic selection
-    if (!selectedModels || !Array.isArray(selectedModels) || selectedModels.length === 0) {
+    const isSelectionValid =
+      selectedModels &&
+      typeof selectedModels === "object" &&
+      (
+        (selectedModels.isMultiModelTask && Array.isArray(selectedModels.tasksDetailArray) && selectedModels.tasksDetailArray.length > 0) ||
+        (Array.isArray(selectedModels.models) && selectedModels.models.length > 0)
+      );
+
+    if (!isSelectionValid) {
       console.log("[modelSelector] All AI selection models failed or were exhausted. Executing heuristic selection process...");
       selectedModels = heuristicModelSelection(
         enrichedText || text,
@@ -720,17 +936,19 @@ ${JSON.stringify(compactTokenStatus, null, 2)}
         attachment,
         repo
       );
-      console.log(`[modelSelector] Heuristic selection selected ${selectedModels.length} diversified candidates:`, selectedModels);
+      console.log(`[modelSelector] Heuristic selection selected:`, selectedModels);
     }
 
-    // Ensure selectedModels has at least 2 distinct candidates across providers for resilience
-    if (selectedModels && Array.isArray(selectedModels) && selectedModels.length === 1) {
-      const first = selectedModels[0];
-      const safetyFallback =
-        first.provider === "gemini"
-          ? { model: "inclusionai/ling-3.0-flash-sante:free", provider: "openrouter" }
-          : { model: "gemini-3.5-flash-lite", provider: "gemini" };
-      selectedModels.push(safetyFallback);
+    // Ensure single-model chain has at least 2 distinct candidates across providers for resilience
+    if (selectedModels && !selectedModels.isMultiModelTask && Array.isArray(selectedModels.models)) {
+      if (selectedModels.models.length === 1) {
+        const first = selectedModels.models[0];
+        const safetyFallback =
+          first.provider === "gemini"
+            ? { model: "inclusionai/ling-3.0-flash-sante:free", provider: "openrouter" }
+            : { model: "gemini-3.5-flash-lite", provider: "gemini" };
+        selectedModels.models.push(safetyFallback);
+      }
     }
 
     // Attach data to request for downstream chatResponse controller
