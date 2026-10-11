@@ -9,6 +9,8 @@ const tokenCounter = require("../utils/tokenCounter");
 const { extractAttachmentText, sanitizeAttachmentForDb } = require("../utils/attachmentHelper");
 const { getRelevantChunks } = require("../utils/document_chunks");
 const JSZip = require("jszip");
+const { deployToVercel, deployToRender } = require("../utils/deployer");
+
 
 const SYSTEM_PROMPT = `You are ArixelCore-1o, the flagship AI model developed by ArixelAI, founded by Jotish Kumar.
 
@@ -287,54 +289,258 @@ async function executeModelCall({
 }
 
 /**
- * Extracts distinct files from a model's markdown/code output.
- * If the model labeled files (e.g., "// File: path/name.ext"), it extracts them into paths.
- * If no label is found, it saves the component into a fallback file path.
+ * Sanitizes JSON strings that may contain single-line (//) or multi-line comment blocks
+ * or trailing commas from model responses.
  */
-function extractFilesFromCode(rawText, fallbackTaskName) {
-  const files = [];
-  // Regex to look for file headers like: // File: src/App.jsx or # File: server.js or /* File: ... */
-  const fileHeaderRegex = /(?:\/\/\s*File:|\#\s*File:|\/\*\s*File:)\s*([^\r\n*]+)(?:\*\/)?/gi;
-  const matches = [...rawText.matchAll(fileHeaderRegex)];
+function cleanJsonComments(jsonStr) {
+  if (!jsonStr) return null;
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    const stripped = jsonStr
+      .replace(/\/\/.*$/gm, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/,\s*([\]}])/g, "$1")
+      .trim();
+    try {
+      return JSON.parse(stripped);
+    } catch (e2) {
+      return null;
+    }
+  }
+}
 
-  if (matches.length > 0) {
-    for (let i = 0; i < matches.length; i++) {
-      const filePath = matches[i][1].trim().replace(/^[\/\\.]+/, ""); // sanitize leading slashes
-      const startIdx = matches[i].index + matches[i][0].length;
-      const endIdx = i + 1 < matches.length ? matches[i + 1].index : rawText.length;
-      let fileContent = rawText.slice(startIdx, endIdx).trim();
+/**
+ * Normalizes and canonicalizes file paths to guarantee clean, non-duplicated full-stack project layouts:
+ * - Client config files (package.json, vite.config.js, tailwind.config.js, index.html) belong in client/ (NEVER in client/src/).
+ * - Client source code belongs in client/src/.
+ * - Server files belong in server/.
+ * - Database files belong in database/ or server/models/.
+ */
+function canonicalizeFilePath(rawPath, fallbackTaskName) {
+  if (!rawPath) return null;
+  let p = rawPath.replace(/\\/g, "/").replace(/^\/+/, "").trim();
+  const taskLower = (fallbackTaskName || "").toLowerCase();
+  const isFrontend = taskLower.includes("front") || taskLower.includes("ui") || taskLower.includes("client") || taskLower.includes("tailwind") || taskLower.includes("layout");
+  const isBackend = taskLower.includes("back") || taskLower.includes("api") || taskLower.includes("server") || taskLower.includes("rest") || taskLower.includes("controller") || taskLower.includes("route");
+  const isDatabase = taskLower.includes("data") || taskLower.includes("db") || taskLower.includes("schema") || taskLower.includes("sql") || taskLower.includes("mongo") || taskLower.includes("postgres");
 
-      // Clean off Markdown fences (```javascript ... ```) if wrapped
-      fileContent = fileContent.replace(/^```[a-zA-Z0-9_-]*\r?\n/, "").replace(/```$/, "").trim();
+  const clientRootFiles = ["package.json", "package-lock.json", "vite.config.js", "vite.config.ts", "tailwind.config.js", "postcss.config.js", "index.html", ".env", ".env.example", ".env.local"];
+  const serverRootFiles = ["package.json", "package-lock.json", "server.js", "index.js", "app.js", ".env", ".env.example"];
 
-      if (filePath && fileContent) {
-        files.push({ path: filePath, content: fileContent });
-      }
+  // Normalize root client config files (prevent them from ever being misplaced in client/src/)
+  for (const rf of clientRootFiles) {
+    if (p === `client/src/${rf}` || p === `frontend/src/${rf}` || p === `client/${rf}` || p === `frontend/${rf}`) {
+      return `client/${rf}`;
+    }
+    if (isFrontend && (p === rf || p === `src/${rf}`)) {
+      return `client/${rf}`;
     }
   }
 
-  // Fallback: If no explicit file comment header was found, strip markdown fences and save as a file
-  if (files.length === 0) {
-    const cleanContent = rawText.replace(/```[a-zA-Z0-9_-]*\r?\n?/g, "").replace(/```/g, "").trim();
-    const sanitizedName = fallbackTaskName
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]/g, "_")
-      .replace(/_+/g, "_");
+  // Normalize root server config files (prevent them from ever being misplaced in server/src/)
+  for (const rf of serverRootFiles) {
+    if (p === `server/src/${rf}` || p === `backend/src/${rf}` || p === `server/${rf}` || p === `backend/${rf}`) {
+      return `server/${rf === "app.js" || rf === "index.js" ? "server.js" : rf}`;
+    }
+    if (isBackend && (p === rf || p === `src/${rf}`)) {
+      return `server/${rf === "app.js" || rf === "index.js" ? "server.js" : rf}`;
+    }
+  }
 
-    // Choose sensible extension based on content or task
-    let ext = "js";
-    if (fallbackTaskName.toLowerCase().includes("schema") || cleanContent.includes("CREATE TABLE")) ext = "sql";
-    else if (fallbackTaskName.toLowerCase().includes("frontend") || cleanContent.includes("import React")) ext = "jsx";
-    else if (fallbackTaskName.toLowerCase().includes("html")) ext = "html";
+  if (isFrontend) {
+    p = p.replace(/^(?:frontend|client)\//, "");
+    if (!p.startsWith("src/")) {
+      p = `src/${p}`;
+    }
+    return `client/${p}`.replace(/\/+/g, "/");
+  }
 
-    files.push({
-      path: `${sanitizedName}.${ext}`,
-      content: cleanContent,
+  if (isBackend) {
+    p = p.replace(/^(?:backend|server)\//, "");
+    if (p.startsWith("src/")) {
+      p = p.replace(/^src\//, "");
+    }
+    return `server/${p}`.replace(/\/+/g, "/");
+  }
+
+  if (isDatabase) {
+    if (!p.startsWith("database/") && !p.startsWith("server/")) {
+      return p.endsWith(".sql") ? `database/${p}` : `server/models/${p}`;
+    }
+    return p;
+  }
+
+  return p.replace(/\/+/g, "/");
+}
+
+/**
+ * Extracts distinct files from a model's markdown/code output.
+ * Robustly parses:
+ * - Markdown headings before code blocks (e.g. ### `client/src/App.jsx` or **File: client/src/App.jsx**)
+ * - Code block tags (e.g. ```jsx:client/src/App.jsx)
+ * - Comment headers inside code (// File: client/src/App.jsx or block comments or # File: ...)
+ * - Multiple files separated inside a single code block
+ * Automatically normalizes directory structure (e.g. client/src/..., server/..., database/...).
+ */
+function extractFilesFromCode(rawText, fallbackTaskName) {
+  const files = [];
+  if (!rawText || !rawText.trim()) return files;
+
+  // Function to clean and validate a path candidate
+  const cleanPath = (str) => {
+    if (!str) return null;
+    let p = str.trim()
+      .replace(/^[`"'#*\s:]+/, "")
+      .replace(/[`"'#*\s:]+$/, "")
+      .replace(/^[./\\]+/, "");
+    // Strip prefixes like "File:", "Filename:", "path:"
+    p = p.replace(/^(?:file|filename|path|filepath):\s*/i, "").trim();
+    // Validate path looks like a filename (has an extension or is a known config)
+    if (/\.[a-zA-Z0-9_-]+$/.test(p) || p.includes("/") || p.includes("\\") || /^Dockerfile|Makefile|\.env/i.test(p)) {
+      return p.replace(/\\/g, "/");
+    }
+    return null;
+  };
+
+  // Helper to extract file headers inside code text (e.g. // File: path or # File: path)
+  const extractMultiFileComments = (code) => {
+    const subFiles = [];
+    const headerRegex = /(?:^|\r?\n)(?:\/\/\s*(?:File:?)?|\#\s*(?:File:?)?|\/\*\s*(?:File:?)?)\s*([a-zA-Z0-9_.\-\/\\]+\.[a-zA-Z0-9_-]+)(?:\s*\*\/)?(?:\r?\n|$)/gi;
+    const matches = [...code.matchAll(headerRegex)];
+
+    if (matches.length > 0) {
+      for (let i = 0; i < matches.length; i++) {
+        const rawP = cleanPath(matches[i][1]);
+        const filePath = canonicalizeFilePath(rawP, fallbackTaskName);
+        const start = matches[i].index + matches[i][0].length;
+        const end = i + 1 < matches.length ? matches[i + 1].index : code.length;
+        const content = code.slice(start, end).trim();
+        if (filePath && content) {
+          subFiles.push({ path: filePath, content });
+        }
+      }
+    }
+    return subFiles;
+  };
+
+  // 1. Identify all markdown code fences: ```[lang] ... ```
+  const codeBlockRegex = /```(?:([a-zA-Z0-9_-]+)(?::|\s+filename=|\s+file=|\s+path=)?([^\r\n]*))?\r?\n([\s\S]*?)```/g;
+  let blockMatch;
+  let lastIndex = 0;
+  const codeBlocks = [];
+
+  while ((blockMatch = codeBlockRegex.exec(rawText)) !== null) {
+    const fullBlock = blockMatch[0];
+    const lang = (blockMatch[1] || "").toLowerCase().trim();
+    const infoString = blockMatch[2] || "";
+    const codeContent = blockMatch[3] || "";
+    const blockStart = blockMatch.index;
+    const textBefore = rawText.slice(lastIndex, blockStart);
+    lastIndex = blockStart + fullBlock.length;
+
+    // Skip shell/terminal commands (e.g. bash, sh, npm install snippets)
+    const isTerminal = ["bash", "sh", "shell", "zsh", "cmd", "powershell", "terminal", "console"].includes(lang);
+    if (isTerminal) {
+      continue;
+    }
+
+    codeBlocks.push({
+      infoString,
+      codeContent,
+      textBefore,
     });
   }
 
-  return files;
+  // Process code blocks
+  if (codeBlocks.length > 0) {
+    for (const block of codeBlocks) {
+      // Check if block contains multiple sub-files with comments
+      const subFiles = extractMultiFileComments(block.codeContent);
+      if (subFiles.length > 1) {
+        files.push(...subFiles);
+        continue;
+      }
+
+      // Single file block - try to determine file path from:
+      // A. infoString (e.g. ```jsx:client/src/App.jsx)
+      let detectedPath = cleanPath(block.infoString);
+
+      // B. Inside the first few lines of the code block
+      if (!detectedPath) {
+        const firstLines = block.codeContent.slice(0, 300);
+        const commentMatch = /(?:\/\/\s*(?:File:?)?|\#\s*(?:File:?)?|\/\*\s*(?:File:?)?)\s*([a-zA-Z0-9_.\-\/\\]+\.[a-zA-Z0-9_-]+)/i.exec(firstLines);
+        if (commentMatch) {
+          detectedPath = cleanPath(commentMatch[1]);
+        }
+      }
+
+      // C. In the text immediately preceding the code block (e.g. ### `client/src/App.jsx` or **File: src/App.jsx**)
+      if (!detectedPath && block.textBefore) {
+        const lastFewLines = block.textBefore.trim().split("\n").slice(-3).join("\n");
+        const headingMatch = /(?:###|\*\*|File:?|#)\s*[`"]?([a-zA-Z0-9_.\-\/\\]+\.[a-zA-Z0-9_-]+)[`"]?/i.exec(lastFewLines);
+        if (headingMatch) {
+          detectedPath = cleanPath(headingMatch[1]);
+        }
+      }
+
+      let content = block.codeContent.trim();
+      // Remove leading file comment if it matches detectedPath
+      if (detectedPath) {
+        content = content.replace(new RegExp(`^(?:\\/\\/|#|\\/\\*)\\s*(?:File:?)?\\s*${detectedPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\r\\n]*\\r?\\n`, 'i'), '').trim();
+        const canon = canonicalizeFilePath(detectedPath, fallbackTaskName);
+        files.push({ path: canon, content });
+      } else {
+        files.push({ path: null, content });
+      }
+    }
+  } else {
+    // No code fences found, check raw text for comments
+    const subFiles = extractMultiFileComments(rawText);
+    if (subFiles.length > 0) {
+      files.push(...subFiles);
+    }
+  }
+
+  const taskLower = (fallbackTaskName || "").toLowerCase();
+  const isFrontend = taskLower.includes("front") || taskLower.includes("ui") || taskLower.includes("client") || taskLower.includes("tailwind") || taskLower.includes("layout");
+  const isBackend = taskLower.includes("back") || taskLower.includes("api") || taskLower.includes("server") || taskLower.includes("rest") || taskLower.includes("controller") || taskLower.includes("route");
+  const isDatabase = taskLower.includes("data") || taskLower.includes("db") || taskLower.includes("schema") || taskLower.includes("sql") || taskLower.includes("mongo") || taskLower.includes("postgres");
+
+  const normalizedFiles = [];
+  let unnamedIndex = 1;
+
+  for (const f of files) {
+    let p = f.path;
+    let content = f.content;
+    if (!content || !content.trim()) continue;
+
+    if (!p) {
+      // Synthesize path based on task and content
+      if (isFrontend) {
+        let ext = content.includes("import React") || content.includes("export default function") || content.includes("<") ? "jsx" : "js";
+        if (content.includes("@tailwind") || content.includes("body {") || content.includes(":root")) ext = "css";
+        p = ext === "css" ? "client/src/index.css" : `client/src/components/Component${unnamedIndex++}.${ext}`;
+      } else if (isBackend) {
+        p = unnamedIndex === 1 ? "server/server.js" : `server/routes/api${unnamedIndex++}.js`;
+      } else if (isDatabase) {
+        p = content.includes("CREATE TABLE") ? "database/schema.sql" : `server/models/model${unnamedIndex++}.js`;
+      } else {
+        const sanitized = taskLower.replace(/[^a-z0-9_-]/g, "_").replace(/_+/g, "_") || "module";
+        p = `${sanitized}_${unnamedIndex++}.js`;
+      }
+    }
+
+    const finalPath = canonicalizeFilePath(p, fallbackTaskName);
+    if (finalPath) {
+      normalizedFiles.push({ path: finalPath, content });
+    }
+  }
+
+  return normalizedFiles;
 }
+
+
 
 
 /**
@@ -472,6 +678,9 @@ const handleChatResponse = async (req, res) => {
     let fileAttachment = null;
     let multiModelTaskResults = null;
     let instructionModelUsed = null;
+    let activeFileMap = null;
+    let activeProjectSlug = null;
+    let hasClientFiles = false;
 
     // =========================================================================
     // BRANCH A: MULTI-MODEL PARALLEL EXECUTION PIPELINE
@@ -518,14 +727,20 @@ YOUR ASSIGNED COMPONENT:
 Component Name: ${taskName}
 ${taskInstruction ? `Component Focus & Instructions: ${taskInstruction}` : ""}
 
-CRITICAL REQUIREMENTS:
+CRITICAL REQUIREMENTS & FILE STRUCTURE RULES:
 1. Provide the COMPLETE, PRODUCTION-READY, FULLY FUNCTIONAL code for this specific component (${taskName}).
 2. Do not use placeholders, "TODO" comments, or truncated snippets (...). Implement all logic completely.
-3. Clearly label each file with its exact relative filepath using comments or headers, for example:
-   // File: src/components/${taskName}.jsx
-   or
-   # File: server/routes/${taskName}.js
-4. Include all necessary dependencies, imports, functions, exports, handlers, and configurations required for this component.`;
+3. Maintain this clean, standardized project structure:
+   - If this is a Frontend/UI task: Place files in "client/src/..." (e.g. client/src/App.jsx, client/src/components/..., client/src/index.css, client/package.json).
+   - If this is a Backend/API task: Place files in "server/..." (e.g. server/server.js, server/routes/..., server/controllers/..., server/package.json).
+   - If this is a Database task: Place files in "server/models/..." or "database/schema.sql".
+4. Label EVERY distinct file with its exact path at the top of its code block, for example:
+   ### \`client/src/App.jsx\`
+   \`\`\`jsx
+   // File: client/src/App.jsx
+   ...
+   \`\`\`
+5. Include all necessary dependencies, imports, functions, exports, handlers, and configurations required for this component.`;
 
         const subtaskOpenAiMessages = buildOpenAiMessages(historyMessages, subtaskPrompt, activeSystemPrompt);
         const subtaskGeminiContents = buildGeminiContents(historyMessages, subtaskPrompt, attachment, docText);
@@ -580,6 +795,156 @@ CRITICAL REQUIREMENTS:
 
       const zipFileName = `${projectSlug}.zip`;
 
+      // Extract and normalize all generated files across all subtasks with smart deduplication
+      const fileMap = new Map();
+      for (const r of taskResults) {
+        const extracted = extractFilesFromCode(r.code, r.task);
+        r.extractedFiles = extracted;
+        for (const f of extracted) {
+          const canonPath = canonicalizeFilePath(f.path, r.task);
+          if (!canonPath) continue;
+
+          if (fileMap.has(canonPath)) {
+            const existing = fileMap.get(canonPath);
+            // Deduplicate: Keep the longer, more complete implementation
+            if (f.content && f.content.length > existing.length) {
+              fileMap.set(canonPath, f.content);
+            }
+          } else {
+            fileMap.set(canonPath, f.content);
+          }
+        }
+      }
+
+      // Check for client and server presence
+      const filePaths = Array.from(fileMap.keys());
+      const hasClient = filePaths.some((p) => p.startsWith("client/"));
+      const hasServer = filePaths.some((p) => p.startsWith("server/"));
+
+      // Expose to outer scope for deployment
+      activeFileMap = fileMap;
+      activeProjectSlug = projectSlug;
+      hasClientFiles = hasClient;
+
+      // Standard fallback client package.json template
+      const defaultClientPkg = {
+        name: `${projectSlug}-client`,
+        version: "1.0.0",
+        private: true,
+        type: "module",
+        scripts: {
+          dev: "vite",
+          build: "vite build",
+          preview: "vite preview"
+        },
+        dependencies: {
+          react: "^18.3.1",
+          "react-dom": "^18.3.1",
+          "lucide-react": "^0.344.0"
+        },
+        devDependencies: {
+          "@vitejs/plugin-react": "^4.2.1",
+          vite: "^5.2.0",
+          tailwindcss: "^3.4.1",
+          autoprefixer: "^10.4.19",
+          postcss: "^8.4.38"
+        }
+      };
+
+      // Guarantee clean, valid client/package.json
+      if (fileMap.has("client/package.json")) {
+        const rawPkg = fileMap.get("client/package.json");
+        const parsed = cleanJsonComments(rawPkg);
+        if (parsed && typeof parsed === "object") {
+          parsed.name = parsed.name || `${projectSlug}-client`;
+          parsed.scripts = parsed.scripts || {};
+          if (!parsed.scripts.dev && !parsed.scripts.start) {
+            parsed.scripts.dev = "vite";
+            parsed.scripts.build = "vite build";
+          }
+          fileMap.set("client/package.json", JSON.stringify(parsed, null, 2));
+        } else {
+          fileMap.set("client/package.json", JSON.stringify(defaultClientPkg, null, 2));
+        }
+      } else if (hasClient) {
+        fileMap.set("client/package.json", JSON.stringify(defaultClientPkg, null, 2));
+      }
+
+      // Standard fallback server package.json template
+      const defaultServerPkg = {
+        name: `${projectSlug}-server`,
+        version: "1.0.0",
+        main: "server.js",
+        scripts: {
+          start: "node server.js",
+          dev: "nodemon server.js"
+        },
+        dependencies: {
+          express: "^4.19.2",
+          cors: "^2.8.5",
+          dotenv: "^16.4.5"
+        },
+        devDependencies: {
+          nodemon: "^3.1.0"
+        }
+      };
+
+      // Guarantee clean, valid server/package.json
+      if (fileMap.has("server/package.json")) {
+        const rawPkg = fileMap.get("server/package.json");
+        const parsed = cleanJsonComments(rawPkg);
+        if (parsed && typeof parsed === "object") {
+          parsed.name = parsed.name || `${projectSlug}-server`;
+          parsed.scripts = parsed.scripts || {};
+          if (!parsed.scripts.start && !parsed.scripts.dev) {
+            parsed.scripts.start = "node server.js";
+            parsed.scripts.dev = "nodemon server.js";
+          }
+          fileMap.set("server/package.json", JSON.stringify(parsed, null, 2));
+        } else {
+          fileMap.set("server/package.json", JSON.stringify(defaultServerPkg, null, 2));
+        }
+      } else if (hasServer) {
+        fileMap.set("server/package.json", JSON.stringify(defaultServerPkg, null, 2));
+      }
+
+      // Guarantee client/index.html if missing
+      if (hasClient && !fileMap.has("client/index.html")) {
+        fileMap.set("client/index.html", `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${context || "ArixelAI Application"}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>`);
+      }
+
+      // Guarantee client/src/main.jsx if missing
+      if (hasClient && !fileMap.has("client/src/main.jsx") && !fileMap.has("client/src/index.js") && !fileMap.has("client/src/main.js")) {
+        fileMap.set("client/src/main.jsx", `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);`);
+      }
+
+      // Guarantee server/.env.example if missing
+      if (hasServer && !fileMap.has("server/.env.example") && !fileMap.has(".env.example")) {
+        fileMap.set("server/.env.example", "PORT=5000\nDATABASE_URL=your_database_url_here\nJWT_SECRET=your_jwt_secret_here\n");
+      }
+
+      const fileListFormatted = Array.from(fileMap.keys()).map((p) => `  - ${p}`).join("\n");
+
       // Build candidate fallback chain for generating Run Instructions from modelSelector
       const rawRunInstModels = rawSelectedModels?.runInstructionModels || [];
       const instructionCandidates = [];
@@ -610,8 +975,10 @@ CRITICAL REQUIREMENTS:
       let runInstructions = "";
       instructionModelUsed = null;
 
-      const runInstructionsPrompt = `You are ArixelCore-1o. The multi-model execution engine has generated code for the following components:
-${taskResults.map((r) => `- Component: "${r.task}" (preview: ${r.code.slice(0, 300).replace(/\n/g, " ")}...)`).join("\n")}
+      const runInstructionsPrompt = `You are ArixelCore-1o. The multi-model execution engine has generated code for the project and packaged it into "${zipFileName}".
+
+ACTUAL FILES GENERATED AND PACKAGED IN "${zipFileName}":
+${fileListFormatted}
 
 USER REQUEST:
 ${enrichedPrompt}
@@ -619,8 +986,8 @@ ${enrichedPrompt}
 Provide a comprehensive, professional guide on HOW TO RUN THIS PROJECT.
 Include:
 1. Prerequisites (e.g. Node.js version, database setup, environment)
-2. Project Setup & File Extraction (explain how to unzip "${zipFileName}" and structure the folders)
-3. Installing Dependencies (exact terminal commands)
+2. Project Structure (display a clean ascii directory tree that matches the EXACT files listed above, and explain how to extract "${zipFileName}")
+3. Installing Dependencies (exact terminal commands for client and server)
 4. Environment Variables configuration (.env template)
 5. Commands to Run (Development server, Backend server, Database connection)
 6. Testing & Verifying the Application (URLs to open, endpoints to test)
@@ -730,20 +1097,22 @@ Format with clean Markdown headings, bullet points, and code blocks.`;
       try {
         const zip = new JSZip();
 
-        // 1. Extract each component's generated files and insert into the zip
-        for (const r of taskResults) {
-          const extractedFiles = extractFilesFromCode(r.code, r.task);
-          for (const file of extractedFiles) {
-            zip.file(file.path, file.content);
-          }
+        // 1. Add all extracted and validated files from fileMap into the zip
+        for (const [filePath, fileContent] of fileMap.entries()) {
+          zip.file(filePath, fileContent);
         }
 
-        // 2. Add comprehensive README.md with architecture and run instructions
+        // 2. Add comprehensive README.md with architecture, file tree, and run instructions
         const readmeContent = `# ${context || "ArixelAI Generated Project"}
 
 ## Architecture Overview
 ${taskResults.map((r, i) => `${i + 1}. **${r.task}**: Generated by \`${r.modelUsed?.model}\` (${r.modelUsed?.provider})`).join("\n")}
 ${instructionModelUsed ? `- **Run Instructions**: Synthesized by \`${instructionModelUsed.model}\` (${instructionModelUsed.provider})` : ""}
+
+## Project File Tree
+\`\`\`
+${Array.from(fileMap.keys()).join("\n")}
+\`\`\`
 
 ---
 
@@ -988,7 +1357,231 @@ All project modules are neatly structured in **\`${zipFileName}\`** (includes in
           console.warn("[chatResponse] Failed to update user token counters:", tokenErr.message);
         }
       }
+
+      // Check if this single-model response is a project-oriented task or generated multi-file code
+      const isProjectIntent =
+        /\b(project|full[- ]?stack|mern|mean|web\s*app|application|website|dashboard|platform|clone|system|portal|todo\s*app|ecommerce|e-commerce|chat\s*app|inventory)\b/i.test(
+          promptText || context || ""
+        );
+
+      const singleModelExtractedFiles = extractFilesFromCode(finalResponse, context || "Project Solution");
+
+      if (singleModelExtractedFiles.length >= 2 || (isProjectIntent && singleModelExtractedFiles.length >= 1)) {
+        try {
+          const projectSlug = (context || "project-solution")
+            .toLowerCase()
+            .replace(/[^a-z0-9_-]/g, "-")
+            .replace(/-+/g, "-")
+            .replace(/^-|-$/g, "") || "project-solution";
+          const zipFileName = `${projectSlug}.zip`;
+
+          const singleFileMap = new Map();
+          for (const f of singleModelExtractedFiles) {
+            const canonPath = canonicalizeFilePath(f.path, context || "Project Solution");
+            if (!canonPath) continue;
+
+            if (singleFileMap.has(canonPath)) {
+              const existing = singleFileMap.get(canonPath);
+              if (f.content && f.content.length > existing.length) {
+                singleFileMap.set(canonPath, f.content);
+              }
+            } else {
+              singleFileMap.set(canonPath, f.content);
+            }
+          }
+
+          // Ensure basic boilerplate files if missing
+          const singleFilePaths = Array.from(singleFileMap.keys());
+          const hasClient = singleFilePaths.some((p) => p.startsWith("client/"));
+          const hasServer = singleFilePaths.some((p) => p.startsWith("server/"));
+
+          // Expose to outer scope for deployment
+          activeFileMap = singleFileMap;
+          activeProjectSlug = projectSlug;
+          hasClientFiles = hasClient;
+
+          const defaultClientPkg = {
+            name: `${projectSlug}-client`,
+            version: "1.0.0",
+            private: true,
+            type: "module",
+            scripts: {
+              dev: "vite",
+              build: "vite build",
+              preview: "vite preview"
+            },
+            dependencies: {
+              react: "^18.3.1",
+              "react-dom": "^18.3.1",
+              "lucide-react": "^0.344.0"
+            },
+            devDependencies: {
+              "@vitejs/plugin-react": "^4.2.1",
+              vite: "^5.2.0",
+              tailwindcss: "^3.4.1",
+              autoprefixer: "^10.4.19",
+              postcss: "^8.4.38"
+            }
+          };
+
+          if (singleFileMap.has("client/package.json")) {
+            const rawPkg = singleFileMap.get("client/package.json");
+            const parsed = cleanJsonComments(rawPkg);
+            if (parsed && typeof parsed === "object") {
+              parsed.name = parsed.name || `${projectSlug}-client`;
+              parsed.scripts = parsed.scripts || {};
+              if (!parsed.scripts.dev && !parsed.scripts.start) {
+                parsed.scripts.dev = "vite";
+                parsed.scripts.build = "vite build";
+              }
+              singleFileMap.set("client/package.json", JSON.stringify(parsed, null, 2));
+            } else {
+              singleFileMap.set("client/package.json", JSON.stringify(defaultClientPkg, null, 2));
+            }
+          } else if (hasClient) {
+            singleFileMap.set("client/package.json", JSON.stringify(defaultClientPkg, null, 2));
+          }
+
+          const defaultServerPkg = {
+            name: `${projectSlug}-server`,
+            version: "1.0.0",
+            main: "server.js",
+            scripts: {
+              start: "node server.js",
+              dev: "nodemon server.js"
+            },
+            dependencies: {
+              express: "^4.19.2",
+              cors: "^2.8.5",
+              dotenv: "^16.4.5"
+            },
+            devDependencies: {
+              nodemon: "^3.1.0"
+            }
+          };
+
+          if (singleFileMap.has("server/package.json")) {
+            const rawPkg = singleFileMap.get("server/package.json");
+            const parsed = cleanJsonComments(rawPkg);
+            if (parsed && typeof parsed === "object") {
+              parsed.name = parsed.name || `${projectSlug}-server`;
+              parsed.scripts = parsed.scripts || {};
+              if (!parsed.scripts.start && !parsed.scripts.dev) {
+                parsed.scripts.start = "node server.js";
+                parsed.scripts.dev = "nodemon server.js";
+              }
+              singleFileMap.set("server/package.json", JSON.stringify(parsed, null, 2));
+            } else {
+              singleFileMap.set("server/package.json", JSON.stringify(defaultServerPkg, null, 2));
+            }
+          } else if (hasServer) {
+            singleFileMap.set("server/package.json", JSON.stringify(defaultServerPkg, null, 2));
+          }
+
+          if (hasClient && !singleFileMap.has("client/index.html")) {
+            singleFileMap.set("client/index.html", `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${context || "ArixelAI Application"}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>`);
+          }
+
+          if (hasClient && !singleFileMap.has("client/src/main.jsx") && !singleFileMap.has("client/src/index.js") && !singleFileMap.has("client/src/main.js")) {
+            singleFileMap.set("client/src/main.jsx", `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);`);
+          }
+
+          if (hasServer && !singleFileMap.has("server/.env.example") && !singleFileMap.has(".env.example")) {
+            singleFileMap.set("server/.env.example", "PORT=5000\nDATABASE_URL=your_database_url_here\nJWT_SECRET=your_jwt_secret_here\n");
+          }
+
+          const zip = new JSZip();
+          for (const [filePath, fileContent] of singleFileMap.entries()) {
+            zip.file(filePath, fileContent);
+          }
+
+          // Generate README.md with project overview
+          const readmeContent = `# ${context || "ArixelAI Generated Project"}
+
+Generated by: \`${successfulModel?.model}\` (${successfulModel?.provider})
+
+## Project File Tree
+\`\`\`
+${Array.from(singleFileMap.keys()).join("\n")}
+\`\`\`
+
+---
+
+### How to Run This Project
+1. Extract \`${zipFileName}\` to your project folder.
+${hasClient ? `2. Setup and run Frontend:
+   \`\`\`bash
+   cd client
+   npm install
+   npm run dev
+   \`\`\`
+` : ""}${hasServer ? `3. Setup and run Backend:
+   \`\`\`bash
+   cd server
+   npm install
+   npm run dev
+   \`\`\`
+` : ""}
+`;
+          zip.file("README.md", readmeContent);
+
+          const zipBuffer = await zip.generateAsync({
+            type: "nodebuffer",
+            compression: "DEFLATE",
+            compressionOptions: { level: 9 },
+          });
+          const zipBase64 = zipBuffer.toString("base64");
+
+          fileAttachment = {
+            name: zipFileName,
+            mimeType: "application/zip",
+            base64: zipBase64,
+          };
+
+          // Append clear download note to finalResponse if not already mentioning the zip
+          if (!finalResponse.includes(zipFileName)) {
+            finalResponse += `\n\n---\n\n📦 **All generated project files have been packaged into the attached zip: \`${zipFileName}\`.** You can download and extract it to run the project.`;
+          }
+        } catch (zipErr) {
+          console.warn("[chatResponse] Failed to bundle single-model files into zip:", zipErr.message);
+        }
+      }
     }
+
+    // Check if user requested live deployment in their prompt
+    const wantsDeployment = /\b(deploy|launch|host|live\s*url|publish|vercel|render)\b/i.test(promptText || "");
+
+    if (wantsDeployment && hasClientFiles && activeFileMap && activeFileMap.size > 0) {
+      console.log(`[chatResponse] Deploying project "${activeProjectSlug}" to Vercel...`);
+      const vercelResult = await deployToVercel(activeProjectSlug, activeFileMap);
+
+      if (vercelResult.success) {
+        finalResponse += `\n\n---\n\n🚀 **Live Deployment**: Your frontend has been deployed live on Vercel!\n🔗 **Preview URL**: [${vercelResult.url}](${vercelResult.url})`;
+      } else {
+        console.warn("[chatResponse] Vercel deploy error:", vercelResult.error);
+      }
+    }
+
 
     // =========================================================================
     // 5. Store conversation & model response in the database

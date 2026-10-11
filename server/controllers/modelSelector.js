@@ -89,8 +89,8 @@ MULTI-MODEL TASK BREAKDOWN (isMultiModelTask)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1. DETERMINE IF MULTI-MODEL:
-   - Set isMultiModelTask = true ONLY for complex, multi-component tasks (e.g. Full-Stack Applications, large multi-module systems comprising Frontend/UI, Backend/API, Database, AI Services, Deployment/DevOps).
-   - Set isMultiModelTask = false for all single questions, specific algorithms, bug fixes, reasoning tasks, single scripts, essays, image generation, or audio synthesis.
+   - Set isMultiModelTask = true whenever the user requests a project, application, full-stack app, web app, multi-tier software, platform, dashboard, clone, or complete system (e.g. "build a todo app", "create an e-commerce website", "build a chat app", "make a portfolio app with backend", "create an inventory system", Full-Stack Applications comprising Frontend/UI, Backend/API, Database).
+   - Set isMultiModelTask = false ONLY for simple single-file scripts, quick explanations, single algorithmic functions, bug fixes, general Q&A, image generation, or audio synthesis.
 
 2. IF isMultiModelTask = true:
    - Divide the larger complex task into 2 to 4 distinct, cohesive subtasks (e.g. "Frontend / UI", "Backend / API", "Database & Models", "Deployment & Scripts").
@@ -464,9 +464,11 @@ function heuristicModelSelection(promptText, userCurrentTokens, requiredTokens, 
     addModel(m.model, m.provider);
   }
 
-  // Check if prompt requests a complex multi-tier / full-stack task
+  // Check if prompt requests a project, web app, or multi-tier task
   const isComplexMultiPart =
-    /\b(full[- ]?stack|mern|mean|frontend\s+(and|&)\s+backend|backend\s+(and|&)\s+frontend|ui\s+(and|&)\s+backend|database\s+(and|&)\s+backend|entire\s+app|complete\s+(web\s*)?app|architecture)\b/i.test(text);
+    /\b(full[- ]?stack|mern|mean|lamp|jamstack|frontend\s+(and|&)\s+backend|backend\s+(and|&)\s+frontend|ui\s+(and|&)\s+backend|database\s+(and|&)\s+backend|entire\s+app|complete\s+(web\s*)?app|architecture)\b/i.test(text) ||
+    /\b(build|create|develop|make|generate)\b[\s\S]{0,40}\b(app|application|website|web\s*app|project|platform|system|dashboard|portal|store|shop|clone)\b/i.test(text) ||
+    /\b(todo\s*app|ecommerce|e-commerce|chat\s*app|social\s*media|blog|portfolio\s*(site|website|app))\b/i.test(text);
 
   if (isComplexMultiPart) {
     const multiTasks = [
