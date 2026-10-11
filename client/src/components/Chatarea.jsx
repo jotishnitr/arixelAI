@@ -126,6 +126,71 @@ export default function Chatarea({
   const [showOptimizerInfo, setShowOptimizerInfo] = useState(false);
   const optimizerInfoRef = useRef(null);
 
+  // Project Deployment state
+  const [deployStatus, setDeployStatus] = useState({}); // { [msgIndex]: { loading, platform, url, repoUrl, renderUrl, error } }
+  const [activeDeployModal, setActiveDeployModal] = useState(null); // { msgIndex, attachment, context }
+
+  const handleTriggerDeploy = async (msgIndex, attachment, platform = "vercel") => {
+    if (!attachment?.base64) return;
+
+    setDeployStatus((prev) => ({
+      ...prev,
+      [msgIndex]: { loading: true, platform, error: null, url: null, repoUrl: null, renderUrl: null },
+    }));
+
+    try {
+      const projectName = (attachment.name || context || "arixel-project").replace(/\.zip$/i, "");
+      const res = await fetch(`${API_BASE_URL}/api/deployProject`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          zipBase64: attachment.base64,
+          projectName,
+          platform,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setDeployStatus((prev) => ({
+          ...prev,
+          [msgIndex]: {
+            loading: false,
+            platform,
+            url: data.url || data.vercelUrl,
+            repoUrl: data.repoUrl || data.renderRepoUrl,
+            renderUrl: data.renderUrl,
+            error: null,
+          },
+        }));
+      } else {
+        setDeployStatus((prev) => ({
+          ...prev,
+          [msgIndex]: {
+            loading: false,
+            platform,
+            error: data.error || "Deployment failed. Please check server logs and configuration.",
+            url: null,
+          },
+        }));
+      }
+    } catch (err) {
+      console.error("Deploy error:", err);
+      setDeployStatus((prev) => ({
+        ...prev,
+        [msgIndex]: {
+          loading: false,
+          platform,
+          error: "Could not reach deployment server. Please verify your connection.",
+          url: null,
+        },
+      }));
+    }
+  };
+
   // Copy to clipboard state & handler
   const [copiedId, setCopiedId] = useState(null);
 
@@ -794,22 +859,96 @@ export default function Chatarea({
                       ) : (
                         <div className="chat-attached-file">
                           <span className="file-icon">
-                            {msg.attachment?.mimeType?.startsWith("image/") ? "🖼️" : "📄"}
+                            {msg.attachment?.name?.endsWith(".zip") ? "📦" : msg.attachment?.mimeType?.startsWith("image/") ? "🖼️" : "📄"}
                           </span>
                           <span className="file-name">
                             {msg.attachment.name}
                           </span>
-                          {msg.attachment?.base64 && (
-                            <a
-                              href={`data:${msg.attachment.mimeType || "text/plain"};base64,${msg.attachment.base64}`}
-                              download={msg.attachment.name || "download.txt"}
-                              className="chat-attached-download-btn"
-                              title="Download attached file"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              📥 Download
-                            </a>
+                          <div className="chat-attached-actions">
+                            {msg.attachment?.base64 && (
+                              <a
+                                href={`data:${msg.attachment.mimeType || "text/plain"};base64,${msg.attachment.base64}`}
+                                download={msg.attachment.name || "download.txt"}
+                                className="chat-attached-download-btn"
+                                title="Download attached file"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                📥 Download
+                              </a>
+                            )}
+                            {(msg.attachment?.name?.endsWith(".zip") || msg.attachment?.mimeType === "application/zip") && (
+                              <button
+                                type="button"
+                                className="chat-attached-deploy-btn"
+                                onClick={() => setActiveDeployModal({ msgIndex: index, attachment: msg.attachment, context })}
+                                title="Deploy this project live to the web"
+                              >
+                                🚀 Deploy Project
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {deployStatus[index] && (
+                        <div className={`deploy-status-banner ${deployStatus[index].loading ? "loading" : deployStatus[index].error ? "error" : "success"}`}>
+                          {deployStatus[index].loading ? (
+                            <div className="deploy-banner-content loading">
+                              <span className="deploy-spinner"></span>
+                              <span>
+                                Deploying {deployStatus[index].platform === "render" ? "backend to Render" : deployStatus[index].platform === "both" ? "full stack to Vercel & Render" : "frontend to Vercel"}... please wait
+                              </span>
+                            </div>
+                          ) : deployStatus[index].error ? (
+                            <div className="deploy-banner-content error">
+                              <span className="deploy-error-icon">⚠️</span>
+                              <span className="deploy-error-text">{deployStatus[index].error}</span>
+                              <button
+                                type="button"
+                                className="deploy-retry-btn"
+                                onClick={() => setActiveDeployModal({ msgIndex: index, attachment: msg.attachment, context })}
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="deploy-banner-content success">
+                              <div className="deploy-success-header">
+                                <span>🎉 Live Deployment Ready!</span>
+                              </div>
+                              <div className="deploy-link-group">
+                                {deployStatus[index].url && (
+                                  <a
+                                    href={deployStatus[index].url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="deploy-link-btn vercel"
+                                  >
+                                    ⚡ Live App: {deployStatus[index].url}
+                                  </a>
+                                )}
+                                {deployStatus[index].repoUrl && (
+                                  <a
+                                    href={deployStatus[index].repoUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="deploy-link-btn github"
+                                  >
+                                    📂 GitHub Repo: {deployStatus[index].repoUrl}
+                                  </a>
+                                )}
+                                {deployStatus[index].renderUrl && (
+                                  <a
+                                    href={deployStatus[index].renderUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="deploy-link-btn render"
+                                  >
+                                    🌐 Render Web Service: {deployStatus[index].renderUrl}
+                                  </a>
+                                )}
+                              </div>
+                            </div>
                           )}
                         </div>
                       )}
@@ -1655,6 +1794,113 @@ export default function Chatarea({
           </div>
         </div>
       </div>
+
+      {/* Deploy Project Modal */}
+      {activeDeployModal && (
+        <div className="deploy-modal-backdrop" onClick={() => setActiveDeployModal(null)}>
+          <div className="deploy-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="deploy-modal-header">
+              <div className="deploy-modal-title">
+                <span className="deploy-title-icon">🚀</span>
+                <div>
+                  <h3>Deploy Project Live</h3>
+                  <p className="deploy-modal-subtitle">
+                    {(activeDeployModal.attachment?.name || activeDeployModal.context || "arixel-project").replace(/\.zip$/i, "")}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="deploy-modal-close-btn"
+                onClick={() => setActiveDeployModal(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="deploy-modal-body">
+              <p className="deploy-modal-desc">
+                Choose how you want to deploy this generated application:
+              </p>
+
+              <div
+                className="deploy-option-card"
+                onClick={() => {
+                  const { msgIndex, attachment } = activeDeployModal;
+                  setActiveDeployModal(null);
+                  handleTriggerDeploy(msgIndex, attachment, "vercel");
+                }}
+              >
+                <div className="deploy-option-icon vercel">▲</div>
+                <div className="deploy-option-info">
+                  <div className="deploy-option-name-row">
+                    <span className="deploy-option-name">Vercel (Recommended)</span>
+                    <span className="deploy-badge fast">Instant Live</span>
+                  </div>
+                  <p className="deploy-option-detail">
+                    Instantly deploys React / Vite frontend with a live public URL. No GitHub setup required!
+                  </p>
+                </div>
+                <button type="button" className="deploy-select-btn vercel-btn">
+                  Deploy to Vercel
+                </button>
+              </div>
+
+              <div
+                className="deploy-option-card"
+                onClick={() => {
+                  const { msgIndex, attachment } = activeDeployModal;
+                  if (!githubConnected) {
+                    setActiveDeployModal(null);
+                    handleConnectGithub();
+                  } else {
+                    setActiveDeployModal(null);
+                    handleTriggerDeploy(msgIndex, attachment, "render");
+                  }
+                }}
+              >
+                <div className="deploy-option-icon render">🌐</div>
+                <div className="deploy-option-info">
+                  <div className="deploy-option-name-row">
+                    <span className="deploy-option-name">Render (Backend Web Service)</span>
+                    <span className="deploy-badge server">Node.js Server</span>
+                  </div>
+                  <p className="deploy-option-detail">
+                    Automatically creates a GitHub repo on your account and builds a live Web Service on Render.
+                  </p>
+                </div>
+                <button type="button" className="deploy-select-btn render-btn">
+                  {githubConnected ? "Deploy to Render" : "Connect GitHub & Deploy"}
+                </button>
+              </div>
+
+              <div
+                className="deploy-option-card"
+                onClick={() => {
+                  const { msgIndex, attachment } = activeDeployModal;
+                  setActiveDeployModal(null);
+                  handleTriggerDeploy(msgIndex, attachment, "both");
+                }}
+              >
+                <div className="deploy-option-icon fullstack">⚡</div>
+                <div className="deploy-option-info">
+                  <div className="deploy-option-name-row">
+                    <span className="deploy-option-name">Full Stack (Vercel + Render)</span>
+                    <span className="deploy-badge fullstack">All-in-One</span>
+                  </div>
+                  <p className="deploy-option-detail">
+                    Deploys frontend to Vercel CDN and backend container to Render simultaneously.
+                  </p>
+                </div>
+                <button type="button" className="deploy-select-btn fullstack-btn">
+                  Deploy Full Stack
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
