@@ -654,6 +654,29 @@ const handleChatResponse = async (req, res) => {
       ? `${SYSTEM_PROMPT}\n\n${TOKEN_OPTIMIZER_PROTOCOL}`
       : SYSTEM_PROMPT;
 
+    // 2.5 Check if there is an existing project zip in this conversation history
+    let previousZipAttachment = null;
+    const historyList = chat?.messages || historyMessages || [];
+    for (let i = historyList.length - 1; i >= 0; i--) {
+      const m = historyList[i];
+      if (
+        m?.attachment?.base64 &&
+        (m.attachment.mimeType === "application/zip" || m.attachment.name?.endsWith(".zip"))
+      ) {
+        previousZipAttachment = m.attachment;
+        break;
+      }
+    }
+
+    const isBugFixOrUpdateIntent =
+      /\b(fix|bug|error|fail|issue|crash|debug|deploy|update|modify|change|add|rectify|rectified|repair|solve)\b/i.test(
+        promptText || ""
+      );
+
+    if (previousZipAttachment && isBugFixOrUpdateIntent) {
+      enrichedPrompt = `${enrichedPrompt}\n\n[PROJECT CONTEXT & RECTIFICATION INSTRUCTION]:\nYou are fixing, updating, or debugging an existing project that was previously packaged into "${previousZipAttachment.name || "project.zip"}". When providing code fixes or modifications, ALWAYS provide the FULL corrected code for any file being modified (not just partial snippets or line diffs) and clearly label the exact file path at the top of the code block (e.g. \`### File: client/src/App.jsx\` or \`### File: server/server.js\`). The automated build system will merge your changes directly into the project archive.`;
+    }
+
     // 3. Prepare payload messages for the providers
     const openAiMessages = buildOpenAiMessages(historyMessages, enrichedPrompt, activeSystemPrompt);
     const geminiContents = buildGeminiContents(historyMessages, enrichedPrompt, attachment, docText);
@@ -797,6 +820,22 @@ CRITICAL REQUIREMENTS & FILE STRUCTURE RULES:
 
       // Extract and normalize all generated files across all subtasks with smart deduplication
       const fileMap = new Map();
+
+      // If updating an existing project, preload previous files as the base
+      if (previousZipAttachment?.base64) {
+        try {
+          const prevZip = await JSZip.loadAsync(Buffer.from(previousZipAttachment.base64, "base64"));
+          for (const relPath of Object.keys(prevZip.files)) {
+            const entry = prevZip.files[relPath];
+            if (!entry.dir) {
+              fileMap.set(relPath, await entry.async("string"));
+            }
+          }
+          console.log(`[chatResponse] Loaded ${fileMap.size} base files from previous zip for multi-model.`);
+        } catch (pzErr) {
+          console.warn("[chatResponse] Failed to unpack previous zip in multi-model:", pzErr.message);
+        }
+      }
       for (const r of taskResults) {
         const extracted = extractFilesFromCode(r.code, r.task);
         r.extractedFiles = extracted;
@@ -1366,7 +1405,11 @@ All project modules are neatly structured in **\`${zipFileName}\`** (includes in
 
       const singleModelExtractedFiles = extractFilesFromCode(finalResponse, context || "Project Solution");
 
-      if (singleModelExtractedFiles.length >= 2 || (isProjectIntent && singleModelExtractedFiles.length >= 1)) {
+      if (
+        singleModelExtractedFiles.length >= 2 ||
+        (isProjectIntent && singleModelExtractedFiles.length >= 1) ||
+        (previousZipAttachment && singleModelExtractedFiles.length >= 1)
+      ) {
         try {
           const projectSlug = (context || "project-solution")
             .toLowerCase()
@@ -1376,18 +1419,29 @@ All project modules are neatly structured in **\`${zipFileName}\`** (includes in
           const zipFileName = `${projectSlug}.zip`;
 
           const singleFileMap = new Map();
+
+          // If updating an existing project, load previous files as the base
+          if (previousZipAttachment?.base64) {
+            try {
+              const prevZip = await JSZip.loadAsync(Buffer.from(previousZipAttachment.base64, "base64"));
+              for (const relPath of Object.keys(prevZip.files)) {
+                const entry = prevZip.files[relPath];
+                if (!entry.dir) {
+                  singleFileMap.set(relPath, await entry.async("string"));
+                }
+              }
+              console.log(`[chatResponse] Loaded ${singleFileMap.size} files from previous project archive for merging.`);
+            } catch (prevZipErr) {
+              console.warn("[chatResponse] Failed to unpack previous zip for merging:", prevZipErr.message);
+            }
+          }
+
           for (const f of singleModelExtractedFiles) {
             const canonPath = canonicalizeFilePath(f.path, context || "Project Solution");
             if (!canonPath) continue;
 
-            if (singleFileMap.has(canonPath)) {
-              const existing = singleFileMap.get(canonPath);
-              if (f.content && f.content.length > existing.length) {
-                singleFileMap.set(canonPath, f.content);
-              }
-            } else {
-              singleFileMap.set(canonPath, f.content);
-            }
+            // When merging bugfixes, always apply model's latest file implementation
+            singleFileMap.set(canonPath, f.content);
           }
 
           // Ensure basic boilerplate files if missing
@@ -1560,7 +1614,11 @@ ${hasClient ? `2. Setup and run Frontend:
 
           // Append clear download note to finalResponse if not already mentioning the zip
           if (!finalResponse.includes(zipFileName)) {
-            finalResponse += `\n\n---\n\n📦 **All generated project files have been packaged into the attached zip: \`${zipFileName}\`.** You can download and extract it to run the project.`;
+            if (previousZipAttachment) {
+              finalResponse += `\n\n---\n\n📦 **Bug fixes applied! The complete updated project files have been packaged into: \`${zipFileName}\`.** You can download the rectified zip or click **🚀 Deploy Project** to launch the updated live build!`;
+            } else {
+              finalResponse += `\n\n---\n\n📦 **All generated project files have been packaged into the attached zip: \`${zipFileName}\`.** You can download and extract it to run the project.`;
+            }
           }
         } catch (zipErr) {
           console.warn("[chatResponse] Failed to bundle single-model files into zip:", zipErr.message);
