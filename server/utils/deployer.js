@@ -35,13 +35,29 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
             return { success: false, error: "No client files found to deploy to Vercel" };
         }
 
-        // 2. Prepare environment variables formatted for Vercel
-        const formattedEnvs = Object.entries(envVars).map(([key, value]) => ({
-            key,
-            value: String(value),
-            type: "plain",
-            target: ["production", "preview"],
-        }));
+        // 2. Prepare environment variables formatted for Vercel (Vercel API expects an object, not an array)
+        const vercelEnvObj = {};
+        if (envVars && typeof envVars === "object") {
+            for (const [key, value] of Object.entries(envVars)) {
+                if (value !== undefined && value !== null) {
+                    vercelEnvObj[key] = String(value);
+                }
+            }
+        }
+
+        const deploymentPayload = {
+            name: projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-"),
+            files: vercelFiles,
+            projectSettings: {
+                framework: "vite",
+                buildCommand: "npm run build",
+                outputDirectory: "dist",
+            },
+        };
+
+        if (Object.keys(vercelEnvObj).length > 0) {
+            deploymentPayload.env = vercelEnvObj;
+        }
 
         // 3. Make POST request to Vercel Deployments API
         const response = await fetch("https://api.vercel.com/v13/deployments", {
@@ -50,19 +66,11 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
                 Authorization: `Bearer ${vercelToken}`,
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-                name: projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-"),
-                files: vercelFiles,
-                projectSettings: {
-                    framework: "vite",
-                    buildCommand: "npm run build",
-                    outputDirectory: "dist",
-                },
-                env: formattedEnvs,
-            }),
+            body: JSON.stringify(deploymentPayload),
         });
 
         const data = await response.json();
+
 
         if (!response.ok) {
             throw new Error(data.error?.message || `Vercel deployment failed with status ${response.status}`);
