@@ -14,13 +14,23 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
         // 1. Filter only client/ files and remove the "client/" prefix for Vercel root
         const vercelFiles = [];
         let hasViteConfig = false;
-        let hasVercelJson = false;
 
         for (const [filePath, content] of fileMap.entries()) {
             if (filePath.startsWith("client/")) {
                 const cleanName = filePath.replace(/^client\//, "");
-                if (cleanName === "vite.config.js" || cleanName === "vite.config.ts") hasViteConfig = true;
-                if (cleanName === "vercel.json") hasVercelJson = true;
+                // Discard model's legacy vercel.json which contains broken catch-all routes
+                if (cleanName === "vercel.json") continue;
+
+                if (cleanName === "vite.config.js" || cleanName === "vite.config.ts") {
+                    hasViteConfig = true;
+                    let configStr = content;
+                    if (!configStr.includes("base:") && configStr.includes("defineConfig({")) {
+                        configStr = configStr.replace("defineConfig({", "defineConfig({\n  base: '/',");
+                    }
+                    vercelFiles.push({ file: cleanName, data: configStr });
+                    continue;
+                }
+
                 vercelFiles.push({
                     file: cleanName,
                     data: content,
@@ -32,8 +42,16 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
         if (vercelFiles.length === 0) {
             for (const [filePath, content] of fileMap.entries()) {
                 if (!filePath.startsWith("server/") && !filePath.startsWith("database/")) {
-                    if (filePath === "vite.config.js" || filePath === "vite.config.ts") hasViteConfig = true;
-                    if (filePath === "vercel.json") hasVercelJson = true;
+                    if (filePath === "vercel.json") continue;
+                    if (filePath === "vite.config.js" || filePath === "vite.config.ts") {
+                        hasViteConfig = true;
+                        let configStr = content;
+                        if (!configStr.includes("base:") && configStr.includes("defineConfig({")) {
+                            configStr = configStr.replace("defineConfig({", "defineConfig({\n  base: '/',");
+                        }
+                        vercelFiles.push({ file: filePath, data: configStr });
+                        continue;
+                    }
                     vercelFiles.push({ file: filePath, data: content });
                 }
             }
@@ -43,7 +61,7 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
             return { success: false, error: "No client files found to deploy to Vercel" };
         }
 
-        // Guarantee production vite.config.js with base: '/' to prevent MIME type text/html errors
+        // Guarantee production vite.config.js with base: '/' if not already provided
         if (!hasViteConfig) {
             vercelFiles.push({
                 file: "vite.config.js",
@@ -62,20 +80,19 @@ export default defineConfig({
             });
         }
 
-        // Guarantee vercel.json with proper rewrite rules so static JS/CSS are served directly
-        if (!hasVercelJson) {
-            vercelFiles.push({
-                file: "vercel.json",
-                data: JSON.stringify({
-                    rewrites: [
-                        {
-                            source: "/((?!assets/|.*\\..*).*)",
-                            destination: "/index.html"
-                        }
-                    ]
-                }, null, 2),
-            });
-        }
+        // Always inject modern vercel.json with negative lookahead so static JS/CSS assets are never hijacked
+        vercelFiles.push({
+            file: "vercel.json",
+            data: JSON.stringify({
+                rewrites: [
+                    {
+                        source: "/((?!assets/|.*\\..*).*)",
+                        destination: "/index.html"
+                    }
+                ]
+            }, null, 2),
+        });
+
 
 
         // 2. Prepare environment variables formatted for Vercel (Vercel API expects an object, not an array)
