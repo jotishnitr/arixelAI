@@ -154,16 +154,34 @@ const handleDeployProject = async (req, res) => {
         }
       }
 
+      const hasAnySuccess = Boolean(vercelResult.success || renderResult?.success);
+      if (!hasAnySuccess) {
+        const errorMsg = [
+          vercelResult.error ? `Vercel: ${vercelResult.error}` : null,
+          renderError ? `Render/GitHub: ${renderError}` : null,
+        ].filter(Boolean).join(" | ");
+
+        return res.status(500).json({
+          success: false,
+          error: errorMsg || "Both Vercel and Render deployments failed. Please check credentials.",
+          vercelError: vercelResult.error,
+          renderError: renderError,
+        });
+      }
+
       return res.status(200).json({
         success: true,
         platform: "both",
+        url: vercelResult.success ? vercelResult.url : null,
         vercelUrl: vercelResult.success ? vercelResult.url : null,
         vercelError: vercelResult.success ? null : vercelResult.error,
         renderUrl: renderResult?.success ? renderResult.serviceUrl : null,
+        repoUrl: repoResult?.success ? repoResult.repoUrl : null,
         renderRepoUrl: repoResult?.success ? repoResult.repoUrl : null,
         renderError: renderError || (renderResult && !renderResult.success ? renderResult.error : null),
-        message: "Multi-platform deployment process executed.",
+        message: "Deployment process executed.",
       });
+
     }
 
     return res.status(400).json({ success: false, error: `Unsupported platform: ${platform}` });

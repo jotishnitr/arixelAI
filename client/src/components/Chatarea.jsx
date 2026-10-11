@@ -154,7 +154,8 @@ export default function Chatarea({
       });
 
       const data = await res.json();
-      if (res.ok && data.success) {
+      const hasUrl = Boolean(data.url || data.vercelUrl || data.renderUrl || data.repoUrl);
+      if (res.ok && data.success && hasUrl) {
         setDeployStatus((prev) => ({
           ...prev,
           [msgIndex]: {
@@ -167,16 +168,24 @@ export default function Chatarea({
           },
         }));
       } else {
+        const errorDetail =
+          data.error ||
+          (data.vercelError && data.renderError
+            ? `Vercel: ${data.vercelError} | Render: ${data.renderError}`
+            : data.vercelError || data.renderError) ||
+          "Deployment failed to return a live URL. Please check your credentials.";
+
         setDeployStatus((prev) => ({
           ...prev,
           [msgIndex]: {
             loading: false,
             platform,
-            error: data.error || "Deployment failed. Please check server logs and configuration.",
+            error: errorDetail,
             url: null,
           },
         }));
       }
+
     } catch (err) {
       console.error("Deploy error:", err);
       setDeployStatus((prev) => ({

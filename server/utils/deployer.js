@@ -5,9 +5,9 @@
  */
 
 async function deployToVercel(projectName, fileMap, envVars = {}) {
-    const vercelToken = process.env.VERCEL_TOKEN;
+    const vercelToken = (process.env.VERCEL_TOKEN || process.env.VERCEL_API_KEY || "").trim();
     if (!vercelToken) {
-        return { success: false, error: "VERCEL_TOKEN is not configured in .env" };
+        return { success: false, error: "VERCEL_TOKEN (or VERCEL_API_KEY) is not configured in .env" };
     }
 
     try {
