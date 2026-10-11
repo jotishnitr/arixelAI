@@ -13,10 +13,16 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
     try {
         // 1. Filter only client/ files and remove the "client/" prefix for Vercel root
         const vercelFiles = [];
+        let hasViteConfig = false;
+        let hasVercelJson = false;
+
         for (const [filePath, content] of fileMap.entries()) {
             if (filePath.startsWith("client/")) {
+                const cleanName = filePath.replace(/^client\//, "");
+                if (cleanName === "vite.config.js" || cleanName === "vite.config.ts") hasViteConfig = true;
+                if (cleanName === "vercel.json") hasVercelJson = true;
                 vercelFiles.push({
-                    file: filePath.replace(/^client\//, ""),
+                    file: cleanName,
                     data: content,
                 });
             }
@@ -26,6 +32,8 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
         if (vercelFiles.length === 0) {
             for (const [filePath, content] of fileMap.entries()) {
                 if (!filePath.startsWith("server/") && !filePath.startsWith("database/")) {
+                    if (filePath === "vite.config.js" || filePath === "vite.config.ts") hasViteConfig = true;
+                    if (filePath === "vercel.json") hasVercelJson = true;
                     vercelFiles.push({ file: filePath, data: content });
                 }
             }
@@ -34,6 +42,41 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
         if (vercelFiles.length === 0) {
             return { success: false, error: "No client files found to deploy to Vercel" };
         }
+
+        // Guarantee production vite.config.js with base: '/' to prevent MIME type text/html errors
+        if (!hasViteConfig) {
+            vercelFiles.push({
+                file: "vite.config.js",
+                data: `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  base: '/',
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+  },
+});
+`,
+            });
+        }
+
+        // Guarantee vercel.json with proper rewrite rules so static JS/CSS are served directly
+        if (!hasVercelJson) {
+            vercelFiles.push({
+                file: "vercel.json",
+                data: JSON.stringify({
+                    rewrites: [
+                        {
+                            source: "/((?!assets/|.*\\..*).*)",
+                            destination: "/index.html"
+                        }
+                    ]
+                }, null, 2),
+            });
+        }
+
 
         // 2. Prepare environment variables formatted for Vercel (Vercel API expects an object, not an array)
         const vercelEnvObj = {};
