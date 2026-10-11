@@ -48,6 +48,7 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
         const deploymentPayload = {
             name: projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-"),
             files: vercelFiles,
+            target: "production",
             projectSettings: {
                 framework: "vite",
                 buildCommand: "npm run build",
@@ -71,18 +72,19 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
 
         const data = await response.json();
 
-
         if (!response.ok) {
             throw new Error(data.error?.message || `Vercel deployment failed with status ${response.status}`);
         }
 
-        const liveUrl = `https://${data.url}`;
+        const preferredDomain = (Array.isArray(data.alias) && data.alias.length > 0) ? data.alias[0] : data.url;
+        const liveUrl = `https://${preferredDomain}`;
         return { success: true, url: liveUrl, deploymentId: data.id };
     } catch (err) {
         console.error("[deployer] Vercel error:", err.message);
         return { success: false, error: err.message };
     }
 }
+
 
 /**
  * Creates and deploys a Web Service on Render using Render API.
