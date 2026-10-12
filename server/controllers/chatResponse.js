@@ -26,9 +26,9 @@ RESPONSE GUIDELINES:
 
 WEB DEVELOPMENT & DEPLOYMENT STANDARDS:
 - When generating frontend Single Page Applications (Vite, React, Vue, Svelte):
-  * In "vite.config.js", always configure `base: '/'` so production build assets load with correct absolute paths.
-  * In "package.json", ensure valid scripts: `"dev": "vite"`, `"build": "vite build"`, `"preview": "vite preview"`.
-  * NEVER generate legacy "vercel.json" with `routes: [{ src: "/(.*)", dest: "/index.html" }]` because it intercepts and breaks static JS/CSS assets with MIME text/html errors. If a vercel.json is needed for SPA routing, use modern `rewrites: [{ "source": "/(.*)", "destination": "/index.html" }]` or let Vite's zero-config handle it.
+  * In "vite.config.js", always configure base: '/' so production build assets load with correct absolute paths.
+  * In "package.json", ensure valid scripts: "dev": "vite", "build": "vite build", "preview": "vite preview".
+  * NEVER generate legacy "vercel.json" with routes: [{ src: "/(.*)", dest: "/index.html" }] because it intercepts and breaks static JS/CSS assets with MIME text/html errors. If a vercel.json is needed for SPA routing, use modern rewrites: [{ "source": "/(.*)", "destination": "/index.html" }] or let Vite's zero-config handle it.
 
 Contact / Feedback:
 - For bugs, feedback, or support, direct users to: arixelai.noreply@gmail.com`;
@@ -314,6 +314,50 @@ function cleanJsonComments(jsonStr) {
       return null;
     }
   }
+}
+
+/**
+ * Computes an appropriate project slug for packaging and deployment:
+ * - If user is fixing/updating an existing project, reuses the previous project's slug.
+ * - If user is requesting a new project, extracts a concise, descriptive name from the prompt.
+ * - Falls back to context or "arixel-project".
+ */
+function generateProjectSlug(promptText, context, isUpdate, previousZipName) {
+  if (isUpdate && previousZipName) {
+    const prevClean = previousZipName
+      .replace(/\.zip$/i, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    if (prevClean.length >= 2) return prevClean;
+  }
+
+  if (promptText) {
+    let clean = promptText
+      .toLowerCase()
+      .replace(/^(can you |please |i want to |i need to |help me |kindly |now )+/gi, "")
+      .replace(/^(build|create|develop|make|generate|code|design)\s+(a|an|the)?\s*/gi, "")
+      .replace(/[^a-z0-9\s_-]/g, " ")
+      .trim();
+
+    const stopWords = new Set(["a", "an", "the", "with", "using", "in", "and", "for", "to", "of", "on", "from", "now", "app", "project"]);
+    const words = clean.split(/\s+/).filter(w => w.length > 0 && !stopWords.has(w));
+    if (words.length > 0) {
+      const slug = words.slice(0, 4).join("-").replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+      if (slug.length >= 3) {
+        return slug;
+      }
+    }
+  }
+
+  const fallback = (context || "arixel-project")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return fallback || "arixel-project";
 }
 
 /**
@@ -764,9 +808,9 @@ CRITICAL REQUIREMENTS & FILE STRUCTURE RULES:
    - If this is a Backend/API task: Place files in "server/..." (e.g. server/server.js, server/routes/..., server/controllers/..., server/package.json).
    - If this is a Database task: Place files in "server/models/..." or "database/schema.sql".
 4. MODERN BUNDLING & DEPLOYMENT RULES:
-   - If generating "client/vite.config.js", always include `base: '/'` to ensure production assets load with proper absolute paths.
-   - If generating "client/package.json", ensure build script is `"build": "vite build"`.
-   - DO NOT generate legacy "vercel.json" with catch-all `routes: [{ src: "/(.*)", dest: "/index.html" }]` because it hijacks static JS/CSS files and causes MIME type errors. Use modern `rewrites: [{ "source": "/(.*)", "destination": "/index.html" }]` or omit `vercel.json` and let Vite handle routing.
+   - If generating "client/vite.config.js", always include base: '/' to ensure production assets load with proper absolute paths.
+   - If generating "client/package.json", ensure build script is "build": "vite build".
+   - DO NOT generate legacy "vercel.json" with catch-all routes: [{ src: "/(.*)", dest: "/index.html" }] because it hijacks static JS/CSS files and causes MIME type errors. Use modern rewrites: [{ "source": "/(.*)", "destination": "/index.html" }] or omit vercel.json and let Vite handle routing.
 5. Label EVERY distinct file with its exact path at the top of its code block, for example:
    ### \`client/src/App.jsx\`
    \`\`\`jsx
@@ -820,19 +864,14 @@ CRITICAL REQUIREMENTS & FILE STRUCTURE RULES:
       multiModelTaskResults = taskResults;
 
       // Consolidate project files into a downloadable zip archive
-      const projectSlug = (context || "project-solution")
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "") || "project-solution";
-
+      const projectSlug = generateProjectSlug(promptText, context, isBugFixOrUpdateIntent, previousZipAttachment?.name);
       const zipFileName = `${projectSlug}.zip`;
 
       // Extract and normalize all generated files across all subtasks with smart deduplication
       const fileMap = new Map();
 
-      // If updating an existing project, preload previous files as the base
-      if (previousZipAttachment?.base64) {
+      // Only preload and merge previous files if the user is explicitly fixing or updating the existing project
+      if (previousZipAttachment?.base64 && isBugFixOrUpdateIntent) {
         try {
           const prevZip = await JSZip.loadAsync(Buffer.from(previousZipAttachment.base64, "base64"));
           for (const relPath of Object.keys(prevZip.files)) {
@@ -1421,17 +1460,13 @@ All project modules are neatly structured in **\`${zipFileName}\`** (includes in
         (previousZipAttachment && singleModelExtractedFiles.length >= 1)
       ) {
         try {
-          const projectSlug = (context || "project-solution")
-            .toLowerCase()
-            .replace(/[^a-z0-9_-]/g, "-")
-            .replace(/-+/g, "-")
-            .replace(/^-|-$/g, "") || "project-solution";
+          const projectSlug = generateProjectSlug(promptText, context, isBugFixOrUpdateIntent, previousZipAttachment?.name);
           const zipFileName = `${projectSlug}.zip`;
 
           const singleFileMap = new Map();
 
-          // If updating an existing project, load previous files as the base
-          if (previousZipAttachment?.base64) {
+          // Only preload and merge previous files if the user is explicitly fixing or updating the existing project
+          if (previousZipAttachment?.base64 && isBugFixOrUpdateIntent) {
             try {
               const prevZip = await JSZip.loadAsync(Buffer.from(previousZipAttachment.base64, "base64"));
               for (const relPath of Object.keys(prevZip.files)) {
