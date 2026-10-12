@@ -24,12 +24,6 @@ RESPONSE GUIDELINES:
 2. Deliver clean formatting, Markdown headings, bullet points, and syntax-highlighted code blocks where appropriate.
 3. Be insightful, actionable, and state-of-the-art in your technical advice and answers.
 
-WEB DEVELOPMENT & DEPLOYMENT STANDARDS:
-- When generating frontend Single Page Applications (Vite, React, Vue, Svelte):
-  * In "vite.config.js", always configure base: '/' so production build assets load with correct absolute paths.
-  * In "package.json", ensure valid scripts: "dev": "vite", "build": "vite build", "preview": "vite preview".
-  * NEVER generate legacy "vercel.json" with routes: [{ src: "/(.*)", dest: "/index.html" }] because it intercepts and breaks static JS/CSS assets with MIME text/html errors. If a vercel.json is needed for SPA routing, use modern rewrites: [{ "source": "/(.*)", "destination": "/index.html" }] or let Vite's zero-config handle it.
-
 Contact / Feedback:
 - For bugs, feedback, or support, direct users to: arixelai.noreply@gmail.com`;
 
@@ -807,17 +801,13 @@ CRITICAL REQUIREMENTS & FILE STRUCTURE RULES:
    - If this is a Frontend/UI task: Place files in "client/src/..." (e.g. client/src/App.jsx, client/src/components/..., client/src/index.css, client/package.json).
    - If this is a Backend/API task: Place files in "server/..." (e.g. server/server.js, server/routes/..., server/controllers/..., server/package.json).
    - If this is a Database task: Place files in "server/models/..." or "database/schema.sql".
-4. MODERN BUNDLING & DEPLOYMENT RULES:
-   - If generating "client/vite.config.js", always include base: '/' to ensure production assets load with proper absolute paths.
-   - If generating "client/package.json", ensure build script is "build": "vite build".
-   - DO NOT generate legacy "vercel.json" with catch-all routes: [{ src: "/(.*)", dest: "/index.html" }] because it hijacks static JS/CSS files and causes MIME type errors. Use modern rewrites: [{ "source": "/(.*)", "destination": "/index.html" }] or omit vercel.json and let Vite handle routing.
-5. Label EVERY distinct file with its exact path at the top of its code block, for example:
+4. Label EVERY distinct file with its exact path at the top of its code block, for example:
    ### \`client/src/App.jsx\`
    \`\`\`jsx
    // File: client/src/App.jsx
    ...
    \`\`\`
-6. Include all necessary dependencies, imports, functions, exports, handlers, and configurations required for this component.`;
+5. Include all necessary dependencies, imports, functions, exports, handlers, and configurations required for this component.`;
 
         const subtaskOpenAiMessages = buildOpenAiMessages(historyMessages, subtaskPrompt, activeSystemPrompt);
         const subtaskGeminiContents = buildGeminiContents(historyMessages, subtaskPrompt, attachment, docText);

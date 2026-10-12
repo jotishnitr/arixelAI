@@ -1,71 +1,12 @@
 // server/utils/deployer.js
 
 /**
- * Deploys frontend files directly to Vercel via Vercel Deployments REST API.
+ * Standard Production Templates:
+ * These rock-solid templates prevent models from introducing configuration and bundler bugs
+ * (e.g. invalid require() in ESM vite.config.js, broken catch-all vercel.json routes, missing start scripts).
  */
 
-async function deployToVercel(projectName, fileMap, envVars = {}) {
-    const vercelToken = (process.env.VERCEL_TOKEN || process.env.VERCEL_API_KEY || "").trim();
-    if (!vercelToken) {
-        return { success: false, error: "VERCEL_TOKEN (or VERCEL_API_KEY) is not configured in .env" };
-    }
-
-    try {
-        // 1. Filter only client/ files and remove the "client/" prefix for Vercel root
-        const vercelFiles = [];
-        let hasViteConfig = false;
-
-        for (const [filePath, content] of fileMap.entries()) {
-            if (filePath.startsWith("client/")) {
-                const cleanName = filePath.replace(/^client\//, "");
-                // Discard model's legacy vercel.json which contains broken catch-all routes
-                if (cleanName === "vercel.json") continue;
-
-                if (cleanName === "vite.config.js" || cleanName === "vite.config.ts") {
-                    hasViteConfig = true;
-                    let configStr = content;
-                    if (!configStr.includes("base:") && configStr.includes("defineConfig({")) {
-                        configStr = configStr.replace("defineConfig({", "defineConfig({\n  base: '/',");
-                    }
-                    vercelFiles.push({ file: cleanName, data: configStr });
-                    continue;
-                }
-
-                vercelFiles.push({
-                    file: cleanName,
-                    data: content,
-                });
-            }
-        }
-
-        // If no client/ prefix, check if files are in root
-        if (vercelFiles.length === 0) {
-            for (const [filePath, content] of fileMap.entries()) {
-                if (!filePath.startsWith("server/") && !filePath.startsWith("database/")) {
-                    if (filePath === "vercel.json") continue;
-                    if (filePath === "vite.config.js" || filePath === "vite.config.ts") {
-                        hasViteConfig = true;
-                        let configStr = content;
-                        if (!configStr.includes("base:") && configStr.includes("defineConfig({")) {
-                            configStr = configStr.replace("defineConfig({", "defineConfig({\n  base: '/',");
-                        }
-                        vercelFiles.push({ file: filePath, data: configStr });
-                        continue;
-                    }
-                    vercelFiles.push({ file: filePath, data: content });
-                }
-            }
-        }
-
-        if (vercelFiles.length === 0) {
-            return { success: false, error: "No client files found to deploy to Vercel" };
-        }
-
-        // Guarantee production vite.config.js with base: '/' if not already provided
-        if (!hasViteConfig) {
-            vercelFiles.push({
-                file: "vite.config.js",
-                data: `import { defineConfig } from 'vite';
+const STANDARD_VITE_CONFIG = `import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
@@ -73,280 +14,636 @@ export default defineConfig({
   base: '/',
   build: {
     outDir: 'dist',
-    assetsDir: 'assets',
+    emptyOutDir: true,
+  },
+  server: {
+    port: 5173,
   },
 });
-`,
-            });
-        }
+`;
 
-        // Always inject modern vercel.json with negative lookahead so static JS/CSS assets are never hijacked
-        vercelFiles.push({
-            file: "vercel.json",
-            data: JSON.stringify({
-                rewrites: [
-                    {
-                        source: "/((?!assets/|.*\\..*).*)",
-                        destination: "/index.html"
-                    }
-                ]
-            }, null, 2),
-        });
+const STANDARD_POSTCSS_CONFIG = `export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+`;
 
+const STANDARD_TAILWIND_CONFIG = `/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};
+`;
 
-
-        // 2. Prepare environment variables formatted for Vercel (Vercel API expects an object, not an array)
-        const vercelEnvObj = {};
-        if (envVars && typeof envVars === "object") {
-            for (const [key, value] of Object.entries(envVars)) {
-                if (value !== undefined && value !== null) {
-                    vercelEnvObj[key] = String(value);
-                }
-            }
-        }
-
-        const deploymentPayload = {
-            name: projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-"),
-            files: vercelFiles,
-            target: "production",
-            projectSettings: {
-                framework: "vite",
-                buildCommand: "npm run build",
-                outputDirectory: "dist",
-            },
-        };
-
-        if (Object.keys(vercelEnvObj).length > 0) {
-            deploymentPayload.env = vercelEnvObj;
-        }
-
-        // 3. Make POST request to Vercel Deployments API
-        const response = await fetch("https://api.vercel.com/v13/deployments", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${vercelToken}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(deploymentPayload),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error?.message || `Vercel deployment failed with status ${response.status}`);
-        }
-
-        const preferredDomain = (Array.isArray(data.alias) && data.alias.length > 0) ? data.alias[0] : data.url;
-        const liveUrl = `https://${preferredDomain}`;
-        return { success: true, url: liveUrl, deploymentId: data.id };
-    } catch (err) {
-        console.error("[deployer] Vercel error:", err.message);
-        return { success: false, error: err.message };
+const STANDARD_VERCEL_JSON = JSON.stringify({
+  rewrites: [
+    {
+      source: "/(.*)",
+      destination: "/index.html"
     }
+  ]
+}, null, 2);
+
+const STANDARD_SERVER_JS = `const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: 'ArixelAI Backend Service', uptime: process.uptime() });
+});
+
+app.get('/', (req, res) => {
+  res.send('ArixelAI Backend API is active and running!');
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(\`Backend server running on port \${PORT}\`);
+});
+`;
+
+/**
+ * Normalizes client package.json by merging standard baseline packages with model requirements.
+ */
+function prepareClientPackageJson(rawStr, projectName) {
+  let pkg = {};
+  if (rawStr) {
+    try {
+      pkg = JSON.parse(rawStr);
+    } catch {
+      pkg = {};
+    }
+  }
+
+  const mergedDeps = {
+    react: "^18.3.1",
+    "react-dom": "^18.3.1",
+    "lucide-react": "^0.344.0",
+    ...(pkg.dependencies || {}),
+  };
+
+  const mergedDevDeps = {
+    "@vitejs/plugin-react": "^4.3.1",
+    vite: "^5.4.2",
+    tailwindcss: "^3.4.10",
+    postcss: "^8.4.41",
+    autoprefixer: "^10.4.20",
+    ...(pkg.devDependencies || {}),
+  };
+
+  // Strip conflicting types that may break pure JS Vite setups
+  delete mergedDeps["@types/react"];
+  delete mergedDeps["@types/react-dom"];
+
+  const finalPkg = {
+    name: projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "frontend-app",
+    private: true,
+    version: "1.0.0",
+    type: "module",
+    scripts: {
+      dev: "vite",
+      build: "vite build",
+      preview: "vite preview",
+    },
+    dependencies: mergedDeps,
+    devDependencies: mergedDevDeps,
+  };
+
+  return JSON.stringify(finalPkg, null, 2);
 }
 
+/**
+ * Normalizes server package.json ensuring production start scripts and baseline dependencies.
+ */
+function prepareServerPackageJson(rawStr, projectName) {
+  let pkg = {};
+  if (rawStr) {
+    try {
+      pkg = JSON.parse(rawStr);
+    } catch {
+      pkg = {};
+    }
+  }
+
+  const mergedDeps = {
+    express: "^4.19.2",
+    cors: "^2.8.5",
+    dotenv: "^16.4.5",
+    ...(pkg.dependencies || {}),
+  };
+
+  const finalPkg = {
+    name: (projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "backend-service") + "-server",
+    version: "1.0.0",
+    description: "Backend API Service built with ArixelAI",
+    main: "server.js",
+    scripts: {
+      start: "node server.js",
+      dev: "node server.js",
+      ...(pkg.scripts || {}),
+    },
+    dependencies: mergedDeps,
+  };
+
+  if (!finalPkg.scripts.start || finalPkg.scripts.start.includes("nodemon")) {
+    finalPkg.scripts.start = "node server.js";
+  }
+
+  return JSON.stringify(finalPkg, null, 2);
+}
+
+/**
+ * Scaffolds and prepares clean frontend files for Vercel deployment.
+ */
+function scaffoldClientFiles(fileMap, projectName) {
+  const vercelFiles = [];
+  const processedKeys = new Set();
+  let rawPkg = null;
+  let hasHtml = false;
+
+  for (const [filePath, content] of fileMap.entries()) {
+    if (filePath.startsWith("client/")) {
+      const cleanName = filePath.replace(/^client\//, "");
+      // Discard model-generated root bundler configs; we supply bulletproof templates
+      if (["vercel.json", "vite.config.js", "vite.config.ts", "postcss.config.js", "postcss.config.mjs"].includes(cleanName)) {
+        continue;
+      }
+      if (cleanName === "package.json") {
+        rawPkg = content;
+        continue;
+      }
+      if (cleanName === "index.html") {
+        hasHtml = true;
+      }
+      let finalName = cleanName;
+      if (finalName.startsWith("src/") && finalName.endsWith(".js") && !finalName.includes("/ml/") && !finalName.includes("/utils/")) {
+        if (content.includes("</") || /<[A-Za-z0-9_]+\s*(\/?>|[\s\S]*?>)/.test(content)) {
+          finalName = finalName.replace(/\.js$/, ".jsx");
+        }
+      }
+      vercelFiles.push({ file: finalName, data: content });
+      processedKeys.add(finalName);
+    }
+  }
+
+  // If no files prefixed with client/, check root level
+  if (vercelFiles.length === 0) {
+    for (const [filePath, content] of fileMap.entries()) {
+      if (!filePath.startsWith("server/") && !filePath.startsWith("database/")) {
+        if (["vercel.json", "vite.config.js", "vite.config.ts", "postcss.config.js", "postcss.config.mjs"].includes(filePath)) {
+          continue;
+        }
+        if (filePath === "package.json") {
+          rawPkg = content;
+          continue;
+        }
+        if (filePath === "index.html") {
+          hasHtml = true;
+        }
+        let finalName = filePath;
+        if (finalName.startsWith("src/") && finalName.endsWith(".js") && !finalName.includes("/ml/") && !finalName.includes("/utils/")) {
+          if (content.includes("</") || /<[A-Za-z0-9_]+\s*(\/?>|[\s\S]*?>)/.test(content)) {
+            finalName = finalName.replace(/\.js$/, ".jsx");
+          }
+        }
+        vercelFiles.push({ file: finalName, data: content });
+        processedKeys.add(finalName);
+      }
+    }
+  }
+
+  // Inject standardized, rock-solid configuration files
+  vercelFiles.push({ file: "package.json", data: prepareClientPackageJson(rawPkg, projectName) });
+  vercelFiles.push({ file: "vite.config.js", data: STANDARD_VITE_CONFIG });
+  vercelFiles.push({ file: "postcss.config.js", data: STANDARD_POSTCSS_CONFIG });
+  if (!processedKeys.has("tailwind.config.js") && !processedKeys.has("tailwind.config.ts")) {
+    vercelFiles.push({ file: "tailwind.config.js", data: STANDARD_TAILWIND_CONFIG });
+  }
+  vercelFiles.push({ file: "vercel.json", data: STANDARD_VERCEL_JSON });
+
+  // Ensure index.html exists
+  if (!hasHtml) {
+    vercelFiles.push({
+      file: "index.html",
+      data: `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${projectName}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+`,
+    });
+  }
+
+  return autoStubMissingImports(vercelFiles);
+}
+
+/**
+ * Scans JavaScript and JSX files for relative imports and auto-stubs any missing components
+ * to prevent Vite/Rollup build crashes (e.g. "Could not resolve ./components/X from src/App.jsx").
+ */
+function autoStubMissingImports(filesList) {
+  const filePaths = new Set(filesList.map((f) => f.file));
+  const newStubs = [];
+
+  for (const f of filesList) {
+    if (!f.file.endsWith(".jsx") && !f.file.endsWith(".js") && !f.file.endsWith(".tsx")) continue;
+    const content = f.data;
+    if (typeof content !== "string") continue;
+
+    // Matches relative imports: import X from './...' or import { X } from '../...'
+    const importRegex = /import\s+(?:([A-Za-z0-9_$]+)\s*,?\s*)?(?:\{([^}]+)\})?\s+from\s+['"](\.[^'"]+)['"]/g;
+    let match;
+    const dir = f.file.includes("/") ? f.file.substring(0, f.file.lastIndexOf("/")) : "";
+
+    while ((match = importRegex.exec(content)) !== null) {
+      const defaultImport = match[1]?.trim();
+      const namedImports = match[2]
+        ? match[2]
+            .split(",")
+            .map((s) => s.trim().split(/\s+as\s+/)[0].trim())
+            .filter(Boolean)
+        : [];
+      const relPath = match[3];
+
+      let target = (dir ? `${dir}/${relPath}` : relPath).replace(/\/\.\//g, "/");
+      const parts = target.split("/");
+      const resolved = [];
+      for (const p of parts) {
+        if (p === "..") resolved.pop();
+        else if (p !== ".") resolved.push(p);
+      }
+      target = resolved.join("/");
+
+      const candidates = [
+        target,
+        `${target}.jsx`,
+        `${target}.js`,
+        `${target}.tsx`,
+        `${target}.ts`,
+        `${target}/index.jsx`,
+        `${target}/index.js`,
+      ];
+
+      const exists = candidates.some((c) => filePaths.has(c));
+      if (!exists) {
+        const isModule = target.includes("/ml/") || target.includes("/services/") || target.includes("/utils/") || target.includes("/lib/");
+        const stubPath = isModule
+          ? (target.endsWith(".js") ? target : `${target}.js`)
+          : (target.endsWith(".jsx") ? target : `${target}.jsx`);
+
+        if (!filePaths.has(stubPath)) {
+          filePaths.add(stubPath);
+          const componentName = defaultImport || "Component";
+          const namedExportsStr = namedImports.map((n) => `export const ${n} = () => null;`).join("\n");
+          let stubCode = "";
+          if (isModule) {
+            stubCode = `// Auto-generated fallback module
+export default function ${componentName}() { return {}; }
+${namedExportsStr}
+`;
+          } else {
+            stubCode = `import React from 'react';
+
+export default function ${componentName}(props) {
+  return (
+    <div className="p-3 my-2 border border-dashed border-gray-600 rounded bg-gray-800/40 text-gray-300 text-sm">
+      <span className="font-semibold">${componentName}</span>
+      {props && props.children}
+    </div>
+  );
+}
+
+${namedExportsStr}
+`;
+          }
+          newStubs.push({ file: stubPath, data: stubCode });
+        }
+      }
+    }
+  }
+
+  return [...filesList, ...newStubs];
+}
+
+/**
+ * Deploys frontend files directly to Vercel via Vercel Deployments REST API.
+ */
+async function deployToVercel(projectName, fileMap, envVars = {}) {
+  const vercelToken = (process.env.VERCEL_TOKEN || process.env.VERCEL_API_KEY || "").trim();
+  if (!vercelToken) {
+    return { success: false, error: "VERCEL_TOKEN (or VERCEL_API_KEY) is not configured in .env" };
+  }
+
+  try {
+    const vercelFiles = scaffoldClientFiles(fileMap, projectName);
+
+    if (vercelFiles.length === 0) {
+      return { success: false, error: "No client files found to deploy to Vercel" };
+    }
+
+    // Prepare environment variables formatted for Vercel
+    const vercelEnvObj = {};
+    if (envVars && typeof envVars === "object") {
+      for (const [key, value] of Object.entries(envVars)) {
+        if (value !== undefined && value !== null) {
+          vercelEnvObj[key] = String(value);
+        }
+      }
+    }
+
+    const deploymentPayload = {
+      name: projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-"),
+      files: vercelFiles,
+      target: "production",
+      projectSettings: {
+        framework: "vite",
+        buildCommand: "npm run build",
+        outputDirectory: "dist",
+      },
+    };
+
+    if (Object.keys(vercelEnvObj).length > 0) {
+      deploymentPayload.env = vercelEnvObj;
+    }
+
+    // Send deployment request to Vercel
+    const response = await fetch("https://api.vercel.com/v13/deployments", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${vercelToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(deploymentPayload),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || `Vercel deployment failed with status ${response.status}`);
+    }
+
+    const preferredDomain = Array.isArray(data.alias) && data.alias.length > 0 ? data.alias[0] : data.url;
+    const liveUrl = `https://${preferredDomain}`;
+
+    // Ensure project has Vercel Deployment Protection disabled so live link is 100% public without authentication gates
+    try {
+      const cleanProjectName = projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+      await fetch(`https://api.vercel.com/v9/projects/${cleanProjectName}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${vercelToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ssoProtection: null }),
+      });
+    } catch {
+      // Non-fatal if protection update fails
+    }
+
+    return { success: true, url: liveUrl, deploymentId: data.id };
+  } catch (err) {
+    console.error("[deployer] Vercel error:", err.message);
+    return { success: false, error: err.message };
+  }
+}
 
 /**
  * Creates and deploys a Web Service on Render using Render API.
  */
 async function deployToRender(serviceName, githubRepoUrl, rootDir = "server") {
-    const renderApiKey = process.env.RENDER_API_KEY;
-    if (!renderApiKey) {
-        return { success: false, error: "RENDER_API_KEY is not configured in .env" };
+  const renderApiKey = process.env.RENDER_API_KEY;
+  if (!renderApiKey) {
+    return { success: false, error: "RENDER_API_KEY is not configured in .env" };
+  }
+
+  try {
+    const ownersRes = await fetch("https://api.render.com/v1/owners", {
+      headers: {
+        Authorization: `Bearer ${renderApiKey}`,
+        Accept: "application/json",
+      },
+    });
+
+    const owners = await ownersRes.json();
+    const ownerId = owners[0]?.owner?.id;
+
+    if (!ownerId) {
+      throw new Error("Could not find a valid Render Owner ID for this API Key");
     }
 
-    try {
-        // 1. Get owner ID from Render account
-        const ownersRes = await fetch("https://api.render.com/v1/owners", {
-            headers: {
-                Authorization: `Bearer ${renderApiKey}`,
-                Accept: "application/json",
-            },
-        });
+    const res = await fetch("https://api.render.com/v1/services", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${renderApiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        type: "web_service",
+        name: serviceName.toLowerCase().replace(/[^a-z0-9_-]/g, "-"),
+        ownerId,
+        repo: githubRepoUrl,
+        branch: "main",
+        rootDir,
+        envVars: [
+          { key: "PORT", value: "5000" },
+          { key: "NODE_ENV", value: "production" },
+        ],
+        serviceDetails: {
+          env: "node",
+          plan: "free",
+          buildCommand: "npm install",
+          startCommand: "npm start",
+        },
+      }),
+    });
 
-        const owners = await ownersRes.json();
-        const ownerId = owners[0]?.owner?.id;
+    const serviceData = await res.json();
 
-        if (!ownerId) {
-            throw new Error("Could not find a valid Render Owner ID for this API Key");
-        }
-
-        // 2. Create the web service on Render
-        const res = await fetch("https://api.render.com/v1/services", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${renderApiKey}`,
-                "Content-Type": "application/json",
-                Accept: "application/json",
-            },
-            body: JSON.stringify({
-                type: "web_service",
-                name: serviceName.toLowerCase().replace(/[^a-z0-9_-]/g, "-"),
-                ownerId,
-                repo: githubRepoUrl,
-                branch: "main",
-                rootDir,
-                envVars: [
-                    { key: "PORT", value: "5000" },
-                    { key: "NODE_ENV", value: "production" },
-                ],
-                serviceDetails: {
-                    env: "node",
-                    plan: "free",
-                    buildCommand: "npm install",
-                    startCommand: "node server.js",
-                },
-            }),
-        });
-
-        const serviceData = await res.json();
-
-        if (!res.ok) {
-            throw new Error(serviceData.message || `Render service creation failed with status ${res.status}`);
-        }
-
-        const liveUrl = serviceData.service?.serviceDetails?.url || `https://${serviceData.service?.slug}.onrender.com`;
-        return { success: true, serviceUrl: liveUrl, serviceId: serviceData.service?.id };
-    } catch (err) {
-        console.error("[deployer] Render error:", err.message);
-        return { success: false, error: err.message };
+    if (!res.ok) {
+      throw new Error(serviceData.message || `Render service creation failed with status ${res.status}`);
     }
+
+    const liveUrl = serviceData.service?.serviceDetails?.url || `https://${serviceData.service?.slug}.onrender.com`;
+    return { success: true, serviceUrl: liveUrl, serviceId: serviceData.service?.id };
+  } catch (err) {
+    console.error("[deployer] Render error:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Prepares and normalizes backend files before pushing to GitHub.
+ */
+function scaffoldServerFiles(fileMap, projectName) {
+  const preparedMap = new Map(fileMap);
+
+  let rawServerPkg = preparedMap.get("server/package.json");
+  preparedMap.set("server/package.json", prepareServerPackageJson(rawServerPkg, projectName));
+
+  const hasServerEntry = preparedMap.has("server/server.js") || preparedMap.has("server/index.js") || preparedMap.has("server/app.js");
+  if (!hasServerEntry) {
+    preparedMap.set("server/server.js", STANDARD_SERVER_JS);
+  }
+
+  if (!preparedMap.has(".gitignore")) {
+    preparedMap.set(".gitignore", "node_modules/\n.env\ndist/\n.DS_Store\n");
+  }
+
+  return preparedMap;
 }
 
 /**
  * Creates a GitHub repository on the user's account and pushes all files in an atomic Git commit.
  */
 async function createGitHubRepoAndPush({ token, repoName, fileMap, description = "Generated by ArixelAI" }) {
-    if (!token) {
-        return { success: false, error: "GitHub access token is required to create a repository." };
+  if (!token) {
+    return { success: false, error: "GitHub access token is required to create a repository." };
+  }
+
+  const cleanRepoName = (repoName || "arixel-project")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "arixel-project";
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "User-Agent": "ArixelAI-Deployer",
+    "Content-Type": "application/json",
+  };
+
+  try {
+    let repoRes = await fetch("https://api.github.com/user/repos", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: cleanRepoName,
+        description,
+        private: false,
+        auto_init: true,
+      }),
+    });
+
+    let repoData = await repoRes.json();
+
+    if (repoRes.status === 422 && repoData.errors?.some((e) => e.message?.includes("name already exists"))) {
+      const uniqueName = `${cleanRepoName}-${Date.now().toString().slice(-4)}`;
+      repoRes = await fetch("https://api.github.com/user/repos", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: uniqueName,
+          description,
+          private: false,
+          auto_init: true,
+        }),
+      });
+      repoData = await repoRes.json();
     }
 
-    const cleanRepoName = (repoName || "arixel-project")
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "") || "arixel-project";
+    if (!repoRes.ok) {
+      throw new Error(repoData.message || `Failed to create GitHub repo: status ${repoRes.status}`);
+    }
 
-    const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "User-Agent": "ArixelAI-Deployer",
-        "Content-Type": "application/json",
+    const owner = repoData.owner?.login;
+    const repo = repoData.name;
+    const htmlUrl = repoData.html_url;
+
+    await new Promise((r) => setTimeout(r, 1200));
+
+    const refRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/ref/heads/main`, { headers });
+    const refData = await refRes.json();
+    const baseCommitSha = refData.object?.sha;
+
+    if (!baseCommitSha) {
+      return { success: true, repoUrl: htmlUrl, owner, repo };
+    }
+
+    // Apply backend normalization scaffold before git tree creation
+    const normalizedFileMap = scaffoldServerFiles(fileMap, cleanRepoName);
+
+    const treeItems = [];
+    for (const [filePath, content] of normalizedFileMap.entries()) {
+      if (!content || typeof content !== "string") continue;
+      treeItems.push({
+        path: filePath.replace(/^[/\\]+/, ""),
+        mode: "100644",
+        type: "blob",
+        content: content,
+      });
+    }
+
+    if (treeItems.length === 0) {
+      return { success: true, repoUrl: htmlUrl, owner, repo };
+    }
+
+    const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ tree: treeItems }),
+    });
+    const treeData = await treeRes.json();
+    if (!treeRes.ok) {
+      throw new Error(treeData.message || "Failed to create Git tree.");
+    }
+
+    const commitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/commits`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        message: "Initialize project codebase via ArixelAI",
+        tree: treeData.sha,
+        parents: [baseCommitSha],
+      }),
+    });
+    const commitData = await commitRes.json();
+    if (!commitRes.ok) {
+      throw new Error(commitData.message || "Failed to create Git commit.");
+    }
+
+    await fetch(`https://api.github.com/repos/${owner}/${repo}/git/refs/heads/main`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ sha: commitData.sha, force: true }),
+    });
+
+    return {
+      success: true,
+      repoUrl: htmlUrl,
+      owner,
+      repo,
     };
-
-    try {
-        // 1. Create the repository
-        let repoRes = await fetch("https://api.github.com/user/repos", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-                name: cleanRepoName,
-                description,
-                private: false,
-                auto_init: true,
-            }),
-        });
-
-        let repoData = await repoRes.json();
-
-        // If repo already exists, append a unique suffix and retry
-        if (repoRes.status === 422 && repoData.errors?.some(e => e.message?.includes("name already exists"))) {
-            const uniqueName = `${cleanRepoName}-${Date.now().toString().slice(-4)}`;
-            repoRes = await fetch("https://api.github.com/user/repos", {
-                method: "POST",
-                headers,
-                body: JSON.stringify({
-                    name: uniqueName,
-                    description,
-                    private: false,
-                    auto_init: true,
-                }),
-            });
-            repoData = await repoRes.json();
-        }
-
-        if (!repoRes.ok) {
-            throw new Error(repoData.message || `Failed to create GitHub repo: status ${repoRes.status}`);
-        }
-
-        const owner = repoData.owner?.login;
-        const repo = repoData.name;
-        const htmlUrl = repoData.html_url;
-
-        // 2. Fetch the latest commit on main branch (wait 1.2s for GitHub to complete auto_init)
-        await new Promise((r) => setTimeout(r, 1200));
-
-        const refRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/ref/heads/main`, { headers });
-        const refData = await refRes.json();
-        const baseCommitSha = refData.object?.sha;
-
-        if (!baseCommitSha) {
-            return { success: true, repoUrl: htmlUrl, owner, repo };
-        }
-
-        // 3. Prepare Git Tree items from fileMap
-        const treeItems = [];
-        for (const [filePath, content] of fileMap.entries()) {
-            if (!content || typeof content !== "string") continue;
-            treeItems.push({
-                path: filePath.replace(/^[/\\]+/, ""),
-                mode: "100644",
-                type: "blob",
-                content: content,
-            });
-        }
-
-        if (treeItems.length === 0) {
-            return { success: true, repoUrl: htmlUrl, owner, repo };
-        }
-
-        // 4. Create Git Tree
-        const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ tree: treeItems }),
-        });
-        const treeData = await treeRes.json();
-        if (!treeRes.ok) {
-            throw new Error(treeData.message || "Failed to create Git tree.");
-        }
-
-        // 5. Create Git Commit
-        const commitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/commits`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-                message: "Initialize project codebase via ArixelAI",
-                tree: treeData.sha,
-                parents: [baseCommitSha],
-            }),
-        });
-        const commitData = await commitRes.json();
-        if (!commitRes.ok) {
-            throw new Error(commitData.message || "Failed to create Git commit.");
-        }
-
-        // 6. Update main branch reference to new commit
-        await fetch(`https://api.github.com/repos/${owner}/${repo}/git/refs/heads/main`, {
-            method: "PATCH",
-            headers,
-            body: JSON.stringify({ sha: commitData.sha, force: true }),
-        });
-
-        return {
-            success: true,
-            repoUrl: htmlUrl,
-            owner,
-            repo,
-        };
-    } catch (err) {
-        console.error("[deployer] GitHub push error:", err.message);
-        return { success: false, error: err.message };
-    }
+  } catch (err) {
+    console.error("[deployer] GitHub push error:", err.message);
+    return { success: false, error: err.message };
+  }
 }
 
 module.exports = {
-    deployToVercel,
-    deployToRender,
-    createGitHubRepoAndPush,
+  deployToVercel,
+  deployToRender,
+  createGitHubRepoAndPush,
 };
