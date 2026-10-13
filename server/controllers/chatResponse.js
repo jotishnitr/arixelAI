@@ -10,7 +10,7 @@ const { extractAttachmentText, sanitizeAttachmentForDb } = require("../utils/att
 const { getRelevantChunks } = require("../utils/document_chunks");
 const JSZip = require("jszip");
 const vm = require("vm");
-const { deployToVercel, deployToRender, deployWithRepair } = require("../utils/deployer");
+const { deployToVercel, deployToRender, deployWithRepair, getLastStubReport } = require("../utils/deployer");
 
 function checkServerSyntax(fileMap) {
   const warnings = [];
@@ -2065,6 +2065,11 @@ Return ONLY full corrected files, each labeled with exact path as ### \`path\` f
       };
 
       const vercelResult = await deployWithRepair(activeProjectSlug, activeFileMap, {}, repairFn);
+
+      const stubbedFiles = typeof getLastStubReport === "function" ? getLastStubReport() : [];
+      if (stubbedFiles && stubbedFiles.length > 0) {
+        finalResponse += `\n\n> ⚠️ **Note:** The following missing files were automatically stubbed to enable build: ${stubbedFiles.join(", ")}`;
+      }
 
       if (vercelResult.success) {
         deployedResult = { platform: "vercel", url: vercelResult.url };

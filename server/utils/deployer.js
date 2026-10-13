@@ -343,6 +343,8 @@ function scaffoldClientFiles(fileMap, projectName, extraPackages = {}) {
   let rawPkg = null;
   let hasHtml = false;
 
+  const renamedJsToJsx = new Map();
+
   for (const [filePath, content] of fileMap.entries()) {
     if (filePath.startsWith("client/")) {
       const cleanName = filePath.replace(/^client\//, "");
@@ -362,6 +364,9 @@ function scaffoldClientFiles(fileMap, projectName, extraPackages = {}) {
         if (content.includes("</") || /<[A-Za-z0-9_]+\s*(\/?>|[\s\S]*?>)/.test(content)) {
           finalName = finalName.replace(/\.js$/, ".jsx");
         }
+      }
+      if (finalName !== cleanName) {
+        renamedJsToJsx.set(cleanName, finalName);
       }
       let fileContent = content;
       if (typeof fileContent === "string" && (finalName.endsWith(".jsx") || finalName.endsWith(".js") || finalName.endsWith(".tsx"))) {
@@ -392,6 +397,9 @@ function scaffoldClientFiles(fileMap, projectName, extraPackages = {}) {
             finalName = finalName.replace(/\.js$/, ".jsx");
           }
         }
+        if (finalName !== filePath) {
+          renamedJsToJsx.set(filePath, finalName);
+        }
         let fileContent = content;
         if (typeof fileContent === "string" && (finalName.endsWith(".jsx") || finalName.endsWith(".js") || finalName.endsWith(".tsx"))) {
           fileContent = fileContent.replace(/(['"])@lucide\/react\1/g, "$1lucide-react$1");
@@ -399,6 +407,25 @@ function scaffoldClientFiles(fileMap, projectName, extraPackages = {}) {
         vercelFiles.push({ file: finalName, data: fileContent });
         processedKeys.add(finalName);
       }
+    }
+  }
+
+  // Rewrite import specifiers that explicitly refer to .js for files renamed to .jsx
+  if (renamedJsToJsx.size > 0) {
+    for (const f of vercelFiles) {
+      if (typeof f.data !== "string") continue;
+      const dir = f.file.includes("/") ? f.file.substring(0, f.file.lastIndexOf("/")) : "";
+      f.data = f.data.replace(
+        /(from\s+['"]|import\s*\(\s*['"]|import\s+['"])(\.{1,2}\/[^'"]*|@\/[^'"]*)\.js(['"])/g,
+        (match, prefix, specWithoutJs, suffix) => {
+          const specJs = `${specWithoutJs}.js`;
+          const target = resolveLocalTarget(specJs, dir);
+          if (renamedJsToJsx.has(target)) {
+            return `${prefix}${specWithoutJs}.jsx${suffix}`;
+          }
+          return match;
+        }
+      );
     }
   }
 
@@ -530,11 +557,35 @@ async function scaffoldClientFilesAsync(fileMap, projectName) {
   return scaffoldClientFiles(fileMap, projectName, resolved);
 }
 
+let lastStubReport = [];
+
+function getLastStubReport() {
+  return [...lastStubReport];
+}
+
+function resolveLocalTarget(relPath, dir) {
+  let target = "";
+  if (relPath.startsWith("@/")) {
+    target = "src/" + relPath.substring(2);
+  } else {
+    target = (dir ? `${dir}/${relPath}` : relPath).replace(/\/\.\//g, "/");
+    const parts = target.split("/");
+    const resolved = [];
+    for (const p of parts) {
+      if (p === "..") resolved.pop();
+      else if (p !== ".") resolved.push(p);
+    }
+    target = resolved.join("/");
+  }
+  return target;
+}
+
 /**
  * Scans JavaScript and JSX files for relative imports and auto-stubs any missing components
  * to prevent Vite/Rollup build crashes (e.g. "Could not resolve ./components/X from src/App.jsx").
  */
 function autoStubMissingImports(filesList) {
+  lastStubReport = [];
   const filePaths = new Set(filesList.map((f) => f.file));
   const newStubs = [];
 
@@ -543,11 +594,88 @@ function autoStubMissingImports(filesList) {
     const content = f.data;
     if (typeof content !== "string") continue;
 
-    // Matches relative imports: ./, ../, or @/
-    const importRegex = /import\s+(?:([A-Za-z0-9_$]+)\s*,?\s*)?(?:\{([^}]+)\})?\s+from\s+['"]([.@][^'"]+)['"]/g;
-    let match;
     const dir = f.file.includes("/") ? f.file.substring(0, f.file.lastIndexOf("/")) : "";
 
+    // 1. Side-effect imports: import './x.css' or import '@/styles/main.css'
+    const sideEffectRegex = /import\s+['"](\.{1,2}\/[^'"]*|@\/[^'"]*)['"];?/g;
+    let seMatch;
+    while ((seMatch = sideEffectRegex.exec(content)) !== null) {
+      const relPath = seMatch[1];
+      const target = resolveLocalTarget(relPath, dir);
+
+      if (target.endsWith(".css")) {
+        if (!filePaths.has(target)) {
+          filePaths.add(target);
+          newStubs.push({ file: target, data: "" });
+          lastStubReport.push(target);
+        }
+      } else {
+        const candidates = [
+          target,
+          `${target}.jsx`,
+          `${target}.js`,
+          `${target}.tsx`,
+          `${target}.ts`,
+          `${target}/index.jsx`,
+          `${target}/index.js`,
+        ];
+        if (!candidates.some((c) => filePaths.has(c))) {
+          const isModule = target.includes("/ml/") || target.includes("/services/") || target.includes("/utils/") || target.includes("/lib/");
+          const stubPath = isModule
+            ? (target.endsWith(".js") ? target : `${target}.js`)
+            : (target.endsWith(".jsx") ? target : `${target}.jsx`);
+          if (!filePaths.has(stubPath)) {
+            filePaths.add(stubPath);
+            newStubs.push({ file: stubPath, data: "// Auto-generated side-effect stub\n" });
+            lastStubReport.push(stubPath);
+          }
+        }
+      }
+    }
+
+    // 2. Namespace imports: import * as X from './path'
+    const namespaceRegex = /import\s+\*\s+as\s+([A-Za-z0-9_$]+)\s+from\s+['"](\.{1,2}\/[^'"]*|@\/[^'"]*)['"]/g;
+    let nsMatch;
+    while ((nsMatch = namespaceRegex.exec(content)) !== null) {
+      const namespaceName = nsMatch[1]?.trim() || "Module";
+      const relPath = nsMatch[2];
+      const target = resolveLocalTarget(relPath, dir);
+
+      const candidates = [
+        target,
+        `${target}.jsx`,
+        `${target}.js`,
+        `${target}.tsx`,
+        `${target}.ts`,
+        `${target}/index.jsx`,
+        `${target}/index.js`,
+      ];
+
+      const matchedCandidate = candidates.find((c) => filePaths.has(c));
+      if (!matchedCandidate) {
+        const isModule = target.includes("/ml/") || target.includes("/services/") || target.includes("/utils/") || target.includes("/lib/");
+        const stubPath = isModule
+          ? (target.endsWith(".js") ? target : `${target}.js`)
+          : (target.endsWith(".jsx") ? target : `${target}.jsx`);
+
+        if (!filePaths.has(stubPath)) {
+          filePaths.add(stubPath);
+          let stubCode = "";
+          if (isModule) {
+            stubCode = `// Auto-generated fallback module\nexport default function ${namespaceName}() { return {}; }\n`;
+          } else {
+            stubCode = `import React from 'react';\n\nexport default function ${namespaceName}(props) {\n  return (\n    <div className="p-3 my-2 border border-dashed border-gray-600 rounded bg-gray-800/40 text-gray-300 text-sm">\n      <span className="font-semibold">${namespaceName}</span>\n      {props && props.children}\n    </div>\n  );\n}\n`;
+          }
+          newStubs.push({ file: stubPath, data: stubCode });
+          lastStubReport.push(stubPath);
+        }
+      }
+    }
+
+    // 3. Standard default and/or named imports:
+    // Only local relative paths (./, ../, @/) to avoid false positives on @scope packages
+    const importRegex = /import\s+(?:([A-Za-z0-9_$]+)\s*,?\s*)?(?:\{([^}]+)\})?\s+from\s+['"](\.{1,2}\/[^'"]*|@\/[^'"]*)['"]/g;
+    let match;
     while ((match = importRegex.exec(content)) !== null) {
       const defaultImport = match[1]?.trim();
       const namedImports = match[2]
@@ -556,21 +684,10 @@ function autoStubMissingImports(filesList) {
             .map((s) => s.trim().split(/\s+as\s+/)[0].trim())
             .filter(Boolean)
         : [];
-      const relPath = match[3];
+      if (!defaultImport && namedImports.length === 0) continue;
 
-      let target = "";
-      if (relPath.startsWith("@/")) {
-        target = "src/" + relPath.substring(2);
-      } else {
-        target = (dir ? `${dir}/${relPath}` : relPath).replace(/\/\.\//g, "/");
-        const parts = target.split("/");
-        const resolved = [];
-        for (const p of parts) {
-          if (p === "..") resolved.pop();
-          else if (p !== ".") resolved.push(p);
-        }
-        target = resolved.join("/");
-      }
+      const relPath = match[3];
+      const target = resolveLocalTarget(relPath, dir);
 
       const candidates = [
         target,
@@ -626,6 +743,7 @@ ${namedExportsStr}
           }
 
           newStubs.push({ file: stubPath, data: stubCode });
+          lastStubReport.push(stubPath);
         }
       } else {
         // File exists; verify that all imported identifiers are exported to prevent Rollup build crashes
@@ -663,6 +781,10 @@ ${namedExportsStr}
         }
       }
     }
+  }
+
+  if (lastStubReport.length > 0) {
+    console.warn("[deployer] Auto-stubbed missing imports:", lastStubReport);
   }
 
   return [...filesList, ...newStubs];
@@ -1039,4 +1161,5 @@ module.exports = {
   scaffoldServerFiles,
   detectPackages,
   resolvePackages,
+  getLastStubReport,
 };
