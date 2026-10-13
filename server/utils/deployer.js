@@ -915,7 +915,7 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
 /**
  * Creates and deploys a Web Service on Render using Render API.
  */
-async function deployToRender(serviceName, githubRepoUrl, rootDir = "server") {
+async function deployToRender(serviceName, githubRepoUrl, rootDir = "server", envVars = {}) {
   const renderApiKey = process.env.RENDER_API_KEY;
   if (!renderApiKey) {
     return { success: false, error: "RENDER_API_KEY is not configured in .env" };
@@ -936,6 +936,19 @@ async function deployToRender(serviceName, githubRepoUrl, rootDir = "server") {
       throw new Error("Could not find a valid Render Owner ID for this API Key");
     }
 
+    const defaultEnvMap = {
+      PORT: "5000",
+      NODE_ENV: "production",
+    };
+    const mergedEnvObj = { ...defaultEnvMap, ...(envVars || {}) };
+    if (!mergedEnvObj.PORT) mergedEnvObj.PORT = "5000";
+    if (!mergedEnvObj.NODE_ENV) mergedEnvObj.NODE_ENV = "production";
+
+    const renderEnvVars = Object.entries(mergedEnvObj).map(([key, value]) => ({
+      key,
+      value: String(value),
+    }));
+
     const res = await fetch("https://api.render.com/v1/services", {
       method: "POST",
       headers: {
@@ -950,15 +963,17 @@ async function deployToRender(serviceName, githubRepoUrl, rootDir = "server") {
         repo: githubRepoUrl,
         branch: "main",
         rootDir,
-        envVars: [
-          { key: "PORT", value: "5000" },
-          { key: "NODE_ENV", value: "production" },
-        ],
+        envVars: renderEnvVars,
         serviceDetails: {
+          runtime: "node",
           env: "node",
           plan: "free",
           buildCommand: "npm install",
           startCommand: "npm start",
+          envSpecificDetails: {
+            buildCommand: "npm install",
+            startCommand: "npm start",
+          },
         },
       }),
     });
@@ -969,8 +984,34 @@ async function deployToRender(serviceName, githubRepoUrl, rootDir = "server") {
       throw new Error(serviceData.message || `Render service creation failed with status ${res.status}`);
     }
 
-    const liveUrl = serviceData.service?.serviceDetails?.url || `https://${serviceData.service?.slug}.onrender.com`;
-    return { success: true, serviceUrl: liveUrl, serviceId: serviceData.service?.id };
+    const liveUrl = serviceData.service?.serviceDetails?.url || serviceData.service?.url || `https://${serviceData.service?.slug}.onrender.com`;
+    const serviceId = serviceData.service?.id;
+
+    // Poll /health (up to ~120s, every 5s)
+    const healthEndpoint = `${liveUrl.replace(/\/+$/, "")}/health`;
+    const startPoll = Date.now();
+    let isHealthy = false;
+
+    while (Date.now() - startPoll < 120000) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const hRes = await fetch(healthEndpoint, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (hRes.status === 200) {
+          isHealthy = true;
+          break;
+        }
+      } catch {
+        // Service starting up or warming
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+
+    if (isHealthy) {
+      return { success: true, serviceUrl: liveUrl, serviceId };
+    }
+    return { success: true, warming: true, serviceUrl: liveUrl, serviceId };
   } catch (err) {
     console.error("[deployer] Render error:", err.message);
     return { success: false, error: err.message };
@@ -1077,13 +1118,39 @@ async function createGitHubRepoAndPush({ token, repoName, fileMap, description =
     const skipServer = new Set(["express", "cors", "dotenv"]);
     const { resolved: serverResolved } = await resolvePackages(detectedServer.filter((p) => !skipServer.has(p)));
 
-    const normalizedFileMap = scaffoldServerFiles(fileMap, cleanRepoName, serverResolved);
+    const normalizedServerMap = scaffoldServerFiles(fileMap, cleanRepoName, serverResolved);
+
+    // Apply frontend scaffold for client files
+    let clientFilesList = [];
+    try {
+      clientFilesList = await scaffoldClientFilesAsync(fileMap, cleanRepoName);
+    } catch {
+      clientFilesList = scaffoldClientFiles(fileMap, cleanRepoName);
+    }
 
     const treeItems = [];
-    for (const [filePath, content] of normalizedFileMap.entries()) {
-      if (!content || typeof content !== "string") continue;
+
+    // Push scaffolded client files prefixed with client/ (excluding .env)
+    for (const cFile of clientFilesList) {
+      if (!cFile || !cFile.file || typeof cFile.data !== "string") continue;
+      const clientPath = `client/${cFile.file.replace(/^[/\\]+/, "")}`;
+      if (clientPath.endsWith("/.env") || clientPath === "client/.env" || clientPath.includes(".env.")) continue;
       treeItems.push({
-        path: filePath.replace(/^[/\\]+/, ""),
+        path: clientPath,
+        mode: "100644",
+        type: "blob",
+        content: cFile.data,
+      });
+    }
+
+    // Push normalized server and other files (excluding client/ and .env)
+    for (const [filePath, content] of normalizedServerMap.entries()) {
+      if (!content || typeof content !== "string") continue;
+      if (filePath.startsWith("client/")) continue; // already pushed via scaffolded client files
+      const cleanPath = filePath.replace(/^[/\\]+/, "");
+      if (cleanPath.endsWith("/.env") || cleanPath === ".env" || cleanPath.includes(".env.")) continue;
+      treeItems.push({
+        path: cleanPath,
         mode: "100644",
         type: "blob",
         content: content,
