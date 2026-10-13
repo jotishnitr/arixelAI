@@ -9,7 +9,26 @@ const tokenCounter = require("../utils/tokenCounter");
 const { extractAttachmentText, sanitizeAttachmentForDb } = require("../utils/attachmentHelper");
 const { getRelevantChunks } = require("../utils/document_chunks");
 const JSZip = require("jszip");
+const vm = require("vm");
 const { deployToVercel, deployToRender, deployWithRepair } = require("../utils/deployer");
+
+function checkServerSyntax(fileMap) {
+  const warnings = [];
+  if (!fileMap || !(fileMap instanceof Map)) return warnings;
+  for (const [filePath, content] of fileMap.entries()) {
+    if (filePath.startsWith("server/") && filePath.endsWith(".js") && typeof content === "string") {
+      const hasEsm = /^\s*(import\s|export\s)/m.test(content);
+      if (!hasEsm) {
+        try {
+          new vm.Script(content, { filename: filePath });
+        } catch (syntaxErr) {
+          warnings.push(`\`${filePath}\`: ${syntaxErr.message}`);
+        }
+      }
+    }
+  }
+  return warnings;
+}
 
 
 const SYSTEM_PROMPT = `You are ArixelCore-1o, the flagship AI model developed by ArixelAI, founded by Jotish Kumar.
@@ -1382,6 +1401,12 @@ Format with clean Markdown headings, bullet points, and code blocks.`;
    - Open \`http://localhost:3000\` or \`http://localhost:5000\` in your browser to verify the application is live.`;
       }
 
+      // Check server files syntax before zipping
+      const serverSyntaxWarnings = checkServerSyntax(fileMap);
+      if (serverSyntaxWarnings.length > 0) {
+        console.warn("[chatResponse] Server syntax warnings found:", serverSyntaxWarnings);
+      }
+
       // Build structured in-memory zip archive with all generated project files & README.md
       try {
         const zip = new JSZip();
@@ -1445,6 +1470,10 @@ ${runInstructions}
 
 ### 📦 Download & Extraction
 All project modules are neatly structured in **\`${zipFileName}\`** (includes individual source files plus a complete \`README.md\`). Click the attachment above to download.`;
+
+      if (serverSyntaxWarnings.length > 0) {
+        finalResponse += `\n\n---\n\n⚠️ **Server Code Syntax Warnings**:\n${serverSyntaxWarnings.map((w) => `- ${w}`).join("\n")}`;
+      }
 
       successfulModel = {
         model: "Multi-Model Ensemble",
@@ -1808,6 +1837,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 
           if (hasServer && !singleFileMap.has("server/.env.example") && !singleFileMap.has(".env.example")) {
             singleFileMap.set("server/.env.example", "PORT=5000\nDATABASE_URL=your_database_url_here\nJWT_SECRET=your_jwt_secret_here\n");
+          }
+
+          // Check server files syntax before zipping
+          const serverSyntaxWarnings = checkServerSyntax(singleFileMap);
+          if (serverSyntaxWarnings.length > 0) {
+            console.warn("[chatResponse] Server syntax warnings found in single-model:", serverSyntaxWarnings);
+            finalResponse += `\n\n---\n\n⚠️ **Server Code Syntax Warnings**:\n${serverSyntaxWarnings.map((w) => `- ${w}`).join("\n")}`;
           }
 
           const zip = new JSZip();

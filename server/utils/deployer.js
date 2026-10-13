@@ -95,8 +95,123 @@ const KNOWN_PACKAGE_CORRECTIONS = {
   "font-awesome": "@fortawesome/fontawesome-free",
   "tailwind": "tailwindcss",
   "@tailwind": "tailwindcss",
-  "@tailwindcss/vite": "@tailwindcss/postcss",
 };
+
+const PREFERRED_PINS = {
+  "react-router-dom": "^6.26.1",
+  axios: "^1.7.7",
+  "framer-motion": "^11.5.4",
+  "canvas-confetti": "^1.9.3",
+};
+
+const NODE_BUILTINS = new Set([
+  "assert", "async_hooks", "buffer", "child_process", "cluster", "console", "constants",
+  "crypto", "dgram", "diagnostics_channel", "dns", "domain", "events", "fs", "fs/promises",
+  "http", "http2", "https", "inspector", "module", "net", "os", "path", "perf_hooks",
+  "process", "punycode", "querystring", "readline", "repl", "stream", "stream/promises",
+  "stream/web", "string_decoder", "sys", "timers", "timers/promises", "tls", "trace_events",
+  "tty", "url", "util", "v8", "vm", "wasi", "worker_threads", "zlib"
+]);
+
+function detectPackages(files) {
+  const codes = [];
+  if (files instanceof Map) {
+    for (const v of files.values()) {
+      if (typeof v === "string") codes.push(v);
+    }
+  } else if (Array.isArray(files)) {
+    for (const f of files) {
+      if (typeof f === "string") codes.push(f);
+      else if (f && typeof f.data === "string") codes.push(f.data);
+      else if (f && typeof f.content === "string") codes.push(f.content);
+    }
+  }
+
+  const specifiers = new Set();
+  const importRegex = /(?:import\s+(?:(?:[A-Za-z0-9_$*\s{},]+)\s+from\s+)?['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\)|export\s+(?:[A-Za-z0-9_$*\s{},]+)\s+from\s+['"]([^'"]+)['"])/g;
+
+  for (const code of codes) {
+    let m;
+    while ((m = importRegex.exec(code)) !== null) {
+      const spec = m[1] || m[2] || m[3];
+      if (spec) specifiers.add(spec.trim());
+    }
+  }
+
+  const packages = new Set();
+  for (const spec of specifiers) {
+    if (spec.startsWith("./") || spec.startsWith("../") || spec.startsWith("@/") || spec.startsWith("/") || spec.startsWith("node:")) {
+      continue;
+    }
+
+    let pkgName = "";
+    if (spec.startsWith("@")) {
+      const parts = spec.split("/");
+      if (parts.length >= 2) {
+        pkgName = `${parts[0]}/${parts[1]}`;
+      } else {
+        pkgName = spec;
+      }
+    } else {
+      pkgName = spec.split("/")[0];
+    }
+
+    if (!pkgName || NODE_BUILTINS.has(pkgName)) {
+      continue;
+    }
+
+    packages.add(pkgName);
+  }
+
+  return Array.from(packages);
+}
+
+async function resolvePackages(packageNames) {
+  const resolved = {};
+  const droppedPackages = [];
+  const names = Array.from(new Set(packageNames));
+
+  const limit = 8;
+  for (let i = 0; i < names.length; i += limit) {
+    const chunk = names.slice(i, i + limit);
+    await Promise.all(
+      chunk.map(async (rawName) => {
+        const name = KNOWN_PACKAGE_CORRECTIONS[rawName] || rawName;
+        if (name === "@tailwindcss/vite" || name === "@tailwindcss/postcss") {
+          return;
+        }
+
+        const url = `https://registry.npmjs.org/${name.replace("/", "%2F")}/latest`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 5000);
+
+        try {
+          const res = await fetch(url, {
+            signal: controller.signal,
+            headers: { Accept: "application/json" },
+          });
+          clearTimeout(timer);
+
+          if (!res.ok) {
+            droppedPackages.push(name);
+            console.warn(`[deployer] Dropped unresolvable package "${name}" (npm registry status ${res.status})`);
+            return;
+          }
+
+          const data = await res.json();
+          const ver = data.version ? `^${data.version}` : "latest";
+          resolved[name] = ver;
+        } catch (err) {
+          clearTimeout(timer);
+          console.warn(`[deployer] Network error resolving "${name}", keeping with "latest": ${err.message}`);
+          resolved[name] = "latest";
+        }
+      })
+    );
+  }
+
+  return { resolved, droppedPackages };
+}
 
 /**
  * Normalizes client package.json by merging standard baseline packages with model requirements
@@ -116,7 +231,7 @@ function prepareClientPackageJson(rawStr, projectName, extraPackages = {}) {
   const cleanedModelDeps = {};
   for (const [depName, version] of Object.entries(rawDeps)) {
     const fixed = KNOWN_PACKAGE_CORRECTIONS[depName] || depName;
-    if (fixed.startsWith("@types/")) continue;
+    if (fixed.startsWith("@types/") || fixed === "@tailwindcss/vite" || fixed === "@tailwindcss/postcss") continue;
     cleanedModelDeps[fixed] = version;
   }
 
@@ -124,7 +239,7 @@ function prepareClientPackageJson(rawStr, projectName, extraPackages = {}) {
   const cleanedModelDevDeps = {};
   for (const [depName, version] of Object.entries(rawDevDeps)) {
     const fixed = KNOWN_PACKAGE_CORRECTIONS[depName] || depName;
-    if (fixed.startsWith("@types/")) continue;
+    if (fixed.startsWith("@types/") || fixed === "@tailwindcss/vite" || fixed === "@tailwindcss/postcss") continue;
     cleanedModelDevDeps[fixed] = version;
   }
 
@@ -152,10 +267,14 @@ function prepareClientPackageJson(rawStr, projectName, extraPackages = {}) {
   delete mergedDeps["@lucide-react"];
   delete mergedDeps["@types/react"];
   delete mergedDeps["@types/react-dom"];
+  delete mergedDeps["@tailwindcss/vite"];
+  delete mergedDeps["@tailwindcss/postcss"];
   delete mergedDevDeps["@lucide/react"];
   delete mergedDevDeps["@lucide-react"];
   delete mergedDevDeps["@types/react"];
   delete mergedDevDeps["@types/react-dom"];
+  delete mergedDevDeps["@tailwindcss/vite"];
+  delete mergedDevDeps["@tailwindcss/postcss"];
 
   const finalPkg = {
     name: projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "frontend-app",
@@ -177,7 +296,7 @@ function prepareClientPackageJson(rawStr, projectName, extraPackages = {}) {
 /**
  * Normalizes server package.json ensuring production start scripts and baseline dependencies.
  */
-function prepareServerPackageJson(rawStr, projectName) {
+function prepareServerPackageJson(rawStr, projectName, extraPackages = {}) {
   let pkg = {};
   if (rawStr) {
     try {
@@ -191,6 +310,7 @@ function prepareServerPackageJson(rawStr, projectName) {
     express: "^4.19.2",
     cors: "^2.8.5",
     dotenv: "^16.4.5",
+    ...extraPackages,
     ...(pkg.dependencies || {}),
   };
 
@@ -217,7 +337,7 @@ function prepareServerPackageJson(rawStr, projectName) {
 /**
  * Scaffolds and prepares clean frontend files for Vercel deployment.
  */
-function scaffoldClientFiles(fileMap, projectName) {
+function scaffoldClientFiles(fileMap, projectName, extraPackages = {}) {
   const vercelFiles = [];
   const processedKeys = new Set();
   let rawPkg = null;
@@ -359,13 +479,20 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     cssEntry.data = `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\n${cssEntry.data}`;
   }
 
-  // 4. Auto-detect common npm libraries in source files
+  // 4. Detected or pinned npm libraries in source files
   const allCode = vercelFiles.map((f) => f.data).join("\n");
   const autoPackages = {};
-  if (allCode.includes("react-router-dom")) autoPackages["react-router-dom"] = "^6.26.1";
-  if (allCode.includes("axios")) autoPackages["axios"] = "^1.7.7";
-  if (allCode.includes("framer-motion")) autoPackages["framer-motion"] = "^11.5.4";
-  if (allCode.includes("canvas-confetti")) autoPackages["canvas-confetti"] = "^1.9.3";
+  if (extraPackages && typeof extraPackages === "object" && Object.keys(extraPackages).length > 0) {
+    for (const [pkg, ver] of Object.entries(extraPackages)) {
+      autoPackages[pkg] = PREFERRED_PINS[pkg] || ver;
+    }
+  } else {
+    // Legacy sync fallback when called directly without async resolver
+    if (allCode.includes("react-router-dom")) autoPackages["react-router-dom"] = "^6.26.1";
+    if (allCode.includes("axios")) autoPackages["axios"] = "^1.7.7";
+    if (allCode.includes("framer-motion")) autoPackages["framer-motion"] = "^11.5.4";
+    if (allCode.includes("canvas-confetti")) autoPackages["canvas-confetti"] = "^1.9.3";
+  }
 
   // Inject standardized, rock-solid configuration files
   vercelFiles.push({ file: "package.json", data: prepareClientPackageJson(rawPkg, projectName, autoPackages) });
@@ -377,6 +504,30 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   vercelFiles.push({ file: "vercel.json", data: STANDARD_VERCEL_JSON });
 
   return autoStubMissingImports(vercelFiles);
+}
+
+/**
+ * Async wrapper that detects packages from client files, resolves versions from npm registry,
+ * and calls scaffoldClientFiles.
+ */
+async function scaffoldClientFilesAsync(fileMap, projectName) {
+  const clientCodes = [];
+  for (const [filePath, content] of fileMap.entries()) {
+    if (filePath.startsWith("client/") || (!filePath.startsWith("server/") && !filePath.startsWith("database/"))) {
+      if (typeof content === "string") clientCodes.push(content);
+    }
+  }
+
+  const detected = detectPackages(clientCodes);
+  const skip = new Set(["react", "react-dom", "vite", "@vitejs/plugin-react", "tailwindcss", "postcss", "autoprefixer", "@tailwindcss/vite", "@tailwindcss/postcss"]);
+  const toResolve = detected.filter((p) => !skip.has(p));
+  const { resolved } = await resolvePackages(toResolve);
+
+  for (const [k, v] of Object.entries(PREFERRED_PINS)) {
+    if (resolved[k]) resolved[k] = v;
+  }
+
+  return scaffoldClientFiles(fileMap, projectName, resolved);
 }
 
 /**
@@ -552,7 +703,7 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
   }
 
   try {
-    const vercelFiles = scaffoldClientFiles(fileMap, projectName);
+    const vercelFiles = await scaffoldClientFilesAsync(fileMap, projectName);
 
     if (vercelFiles.length === 0) {
       return { success: false, error: "No client files found to deploy to Vercel" };
@@ -707,11 +858,11 @@ async function deployToRender(serviceName, githubRepoUrl, rootDir = "server") {
 /**
  * Prepares and normalizes backend files before pushing to GitHub.
  */
-function scaffoldServerFiles(fileMap, projectName) {
+function scaffoldServerFiles(fileMap, projectName, extraPackages = {}) {
   const preparedMap = new Map(fileMap);
 
   let rawServerPkg = preparedMap.get("server/package.json");
-  preparedMap.set("server/package.json", prepareServerPackageJson(rawServerPkg, projectName));
+  preparedMap.set("server/package.json", prepareServerPackageJson(rawServerPkg, projectName, extraPackages));
 
   const hasServerEntry = preparedMap.has("server/server.js") || preparedMap.has("server/index.js") || preparedMap.has("server/app.js");
   if (!hasServerEntry) {
@@ -794,7 +945,17 @@ async function createGitHubRepoAndPush({ token, repoName, fileMap, description =
     }
 
     // Apply backend normalization scaffold before git tree creation
-    const normalizedFileMap = scaffoldServerFiles(fileMap, cleanRepoName);
+    const serverCodes = [];
+    for (const [filePath, content] of fileMap.entries()) {
+      if (filePath.startsWith("server/") && typeof content === "string") {
+        serverCodes.push(content);
+      }
+    }
+    const detectedServer = detectPackages(serverCodes);
+    const skipServer = new Set(["express", "cors", "dotenv"]);
+    const { resolved: serverResolved } = await resolvePackages(detectedServer.filter((p) => !skipServer.has(p)));
+
+    const normalizedFileMap = scaffoldServerFiles(fileMap, cleanRepoName, serverResolved);
 
     const treeItems = [];
     for (const [filePath, content] of normalizedFileMap.entries()) {
@@ -873,4 +1034,9 @@ module.exports = {
   deployToRender,
   createGitHubRepoAndPush,
   deployWithRepair,
+  scaffoldClientFiles,
+  scaffoldClientFilesAsync,
+  scaffoldServerFiles,
+  detectPackages,
+  resolvePackages,
 };
