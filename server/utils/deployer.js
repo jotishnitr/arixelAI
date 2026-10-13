@@ -517,6 +517,31 @@ ${namedExportsStr}
   return [...filesList, ...newStubs];
 }
 
+function vercelUrl(pathWithQuery) {
+  const teamId = (process.env.VERCEL_TEAM_ID || "").trim();
+  if (!teamId) return pathWithQuery;
+  const sep = pathWithQuery.includes("?") ? "&" : "?";
+  return `${pathWithQuery}${sep}teamId=${encodeURIComponent(teamId)}`;
+}
+
+async function waitForReady(id, token, timeoutMs = 240000) {
+  const headers = { Authorization: `Bearer ${token}` };
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const r = await fetch(vercelUrl(`https://api.vercel.com/v13/deployments/${id}`), { headers });
+    const d = await r.json();
+    if (d.readyState === "READY") return { ok: true, d };
+    if (d.readyState === "ERROR" || d.readyState === "CANCELED") {
+      const ev = await fetch(vercelUrl(`https://api.vercel.com/v3/deployments/${id}/events?limit=200`), { headers });
+      const events = await ev.json();
+      const log = (Array.isArray(events) ? events : []).map((e) => e.text || e.payload?.text || "").filter(Boolean).join("\n");
+      return { ok: false, d, log };
+    }
+    await new Promise((r) => setTimeout(r, 4000));
+  }
+  return { ok: false, timeout: true, log: "Build timed out" };
+}
+
 /**
  * Deploys frontend files directly to Vercel via Vercel Deployments REST API.
  */
@@ -556,10 +581,11 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
 
     if (Object.keys(vercelEnvObj).length > 0) {
       deploymentPayload.env = vercelEnvObj;
+      deploymentPayload.build = { env: vercelEnvObj };
     }
 
     // Send deployment request to Vercel
-    const response = await fetch("https://api.vercel.com/v13/deployments", {
+    const response = await fetch(vercelUrl("https://api.vercel.com/v13/deployments"), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${vercelToken}`,
@@ -574,13 +600,10 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
       throw new Error(data.error?.message || `Vercel deployment failed with status ${response.status}`);
     }
 
-    const preferredDomain = Array.isArray(data.alias) && data.alias.length > 0 ? data.alias[0] : data.url;
-    const liveUrl = `https://${preferredDomain}`;
-
     // Ensure project has Vercel Deployment Protection disabled so live link is 100% public without authentication gates
     try {
       const cleanProjectName = projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
-      await fetch(`https://api.vercel.com/v9/projects/${cleanProjectName}`, {
+      const ssoRes = await fetch(vercelUrl(`https://api.vercel.com/v9/projects/${cleanProjectName}`), {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${vercelToken}`,
@@ -588,9 +611,26 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
         },
         body: JSON.stringify({ ssoProtection: null }),
       });
-    } catch {
-      // Non-fatal if protection update fails
+      if (!ssoRes.ok) {
+        console.warn(`[deployer] Disabling SSO protection failed: status ${ssoRes.status}`);
+      }
+    } catch (ssoErr) {
+      console.warn(`[deployer] Non-fatal error updating ssoProtection: ${ssoErr.message}`);
     }
+
+    const ready = await waitForReady(data.id, vercelToken);
+    if (!ready.ok) {
+      const logLines = (ready.log || "").split("\n");
+      const last150Log = logLines.length > 150 ? logLines.slice(-150).join("\n") : (ready.log || "");
+      return {
+        success: false,
+        error: "Vercel build failed",
+        buildLog: last150Log,
+      };
+    }
+
+    const alias = ready.d?.alias?.[0] || ready.d?.url || data.alias?.[0] || data.url;
+    const liveUrl = `https://${alias}`;
 
     return { success: true, url: liveUrl, deploymentId: data.id };
   } catch (err) {
