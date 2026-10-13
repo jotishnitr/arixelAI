@@ -361,13 +361,19 @@ function generateProjectSlug(promptText, context, isUpdate, previousZipName) {
  * - Server files belong in server/.
  * - Database files belong in database/ or server/models/.
  */
-function canonicalizeFilePath(rawPath, fallbackTaskName) {
+function canonicalizeFilePath(rawPath, fallbackTaskName, layerOverride) {
   if (!rawPath) return null;
   let p = rawPath.replace(/\\/g, "/").replace(/^\/+/, "").trim();
   const taskLower = (fallbackTaskName || "").toLowerCase();
-  const isFrontend = taskLower.includes("front") || taskLower.includes("ui") || taskLower.includes("client") || taskLower.includes("tailwind") || taskLower.includes("layout");
-  const isBackend = taskLower.includes("back") || taskLower.includes("api") || taskLower.includes("server") || taskLower.includes("rest") || taskLower.includes("controller") || taskLower.includes("route");
-  const isDatabase = taskLower.includes("data") || taskLower.includes("db") || taskLower.includes("schema") || taskLower.includes("sql") || taskLower.includes("mongo") || taskLower.includes("postgres");
+  const isFrontend = layerOverride
+    ? (layerOverride === "client" || layerOverride === "frontend")
+    : (taskLower.includes("front") || taskLower.includes("ui") || taskLower.includes("client") || taskLower.includes("tailwind") || taskLower.includes("layout"));
+  const isBackend = layerOverride
+    ? (layerOverride === "server" || layerOverride === "backend")
+    : (taskLower.includes("back") || taskLower.includes("api") || taskLower.includes("server") || taskLower.includes("rest") || taskLower.includes("controller") || taskLower.includes("route"));
+  const isDatabase = layerOverride
+    ? (layerOverride === "database" || layerOverride === "db")
+    : (taskLower.includes("data") || taskLower.includes("db") || taskLower.includes("schema") || taskLower.includes("sql") || taskLower.includes("mongo") || taskLower.includes("postgres"));
 
   const clientRootFiles = ["package.json", "package-lock.json", "vite.config.js", "vite.config.ts", "tailwind.config.js", "postcss.config.js", "index.html", ".env", ".env.example", ".env.local"];
   const serverRootFiles = ["package.json", "package-lock.json", "server.js", "index.js", "app.js", ".env", ".env.example"];
@@ -427,7 +433,7 @@ function canonicalizeFilePath(rawPath, fallbackTaskName) {
  * - Multiple files separated inside a single code block
  * Automatically normalizes directory structure (e.g. client/src/..., server/..., database/...).
  */
-function extractFilesFromCode(rawText, fallbackTaskName) {
+function extractFilesFromCode(rawText, fallbackTaskName, layerOverride) {
   const files = [];
   if (!rawText || !rawText.trim()) return files;
 
@@ -456,7 +462,7 @@ function extractFilesFromCode(rawText, fallbackTaskName) {
     if (matches.length > 0) {
       for (let i = 0; i < matches.length; i++) {
         const rawP = cleanPath(matches[i][1]);
-        const filePath = canonicalizeFilePath(rawP, fallbackTaskName);
+        const filePath = canonicalizeFilePath(rawP, fallbackTaskName, layerOverride);
         const start = matches[i].index + matches[i][0].length;
         const end = i + 1 < matches.length ? matches[i + 1].index : code.length;
         const content = code.slice(start, end).trim();
@@ -532,7 +538,7 @@ function extractFilesFromCode(rawText, fallbackTaskName) {
       // Remove leading file comment if it matches detectedPath
       if (detectedPath) {
         content = content.replace(new RegExp(`^(?:\\/\\/|#|\\/\\*)\\s*(?:File:?)?\\s*${detectedPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\r\\n]*\\r?\\n`, 'i'), '').trim();
-        const canon = canonicalizeFilePath(detectedPath, fallbackTaskName);
+        const canon = canonicalizeFilePath(detectedPath, fallbackTaskName, layerOverride);
         files.push({ path: canon, content });
       } else {
         files.push({ path: null, content });
@@ -547,9 +553,15 @@ function extractFilesFromCode(rawText, fallbackTaskName) {
   }
 
   const taskLower = (fallbackTaskName || "").toLowerCase();
-  const isFrontend = taskLower.includes("front") || taskLower.includes("ui") || taskLower.includes("client") || taskLower.includes("tailwind") || taskLower.includes("layout");
-  const isBackend = taskLower.includes("back") || taskLower.includes("api") || taskLower.includes("server") || taskLower.includes("rest") || taskLower.includes("controller") || taskLower.includes("route");
-  const isDatabase = taskLower.includes("data") || taskLower.includes("db") || taskLower.includes("schema") || taskLower.includes("sql") || taskLower.includes("mongo") || taskLower.includes("postgres");
+  const isFrontend = layerOverride
+    ? (layerOverride === "client" || layerOverride === "frontend")
+    : (taskLower.includes("front") || taskLower.includes("ui") || taskLower.includes("client") || taskLower.includes("tailwind") || taskLower.includes("layout"));
+  const isBackend = layerOverride
+    ? (layerOverride === "server" || layerOverride === "backend")
+    : (taskLower.includes("back") || taskLower.includes("api") || taskLower.includes("server") || taskLower.includes("rest") || taskLower.includes("controller") || taskLower.includes("route"));
+  const isDatabase = layerOverride
+    ? (layerOverride === "database" || layerOverride === "db")
+    : (taskLower.includes("data") || taskLower.includes("db") || taskLower.includes("schema") || taskLower.includes("sql") || taskLower.includes("mongo") || taskLower.includes("postgres"));
 
   const normalizedFiles = [];
   let unnamedIndex = 1;
@@ -575,7 +587,7 @@ function extractFilesFromCode(rawText, fallbackTaskName) {
       }
     }
 
-    const finalPath = canonicalizeFilePath(p, fallbackTaskName);
+    const finalPath = canonicalizeFilePath(p, fallbackTaskName, layerOverride);
     if (finalPath) {
       normalizedFiles.push({ path: finalPath, content });
     }
@@ -755,10 +767,126 @@ const handleChatResponse = async (req, res) => {
     if (isMultiModel) {
       console.log(`[chatResponse] Executing MULTI-MODEL task with ${tasksDetailArray.length} parallel chains...`);
 
+      // Phase 3: Planner spec with shared contract
+      let plannerSpec = null;
+      let plannerSpecStr = "";
+      try {
+        const plannerCandidates = [];
+        const seenPlanner = new Set();
+        const rawPlannerModels = [
+          ...(candidateModels || []),
+          ...(rawSelectedModels?.runInstructionModels || []),
+        ];
+        for (const item of rawPlannerModels) {
+          const rawModelId = typeof item === "string" ? item : (item.model || item.modelId);
+          const provider = ((typeof item === "object" ? item.provider : "") || "gemini").toLowerCase();
+          if (!rawModelId) continue;
+          const modelId = resolveModelForProvider(rawModelId, provider);
+          const key = `${provider}:${modelId}`;
+          if (!seenPlanner.has(key)) {
+            seenPlanner.add(key);
+            plannerCandidates.push({ modelId, provider });
+          }
+        }
+        for (const em of emergencyFallbacks) {
+          const key = `${em.provider}:${em.modelId}`;
+          if (!seenPlanner.has(key)) {
+            seenPlanner.add(key);
+            plannerCandidates.push(em);
+          }
+        }
+
+        const plannerPrompt = `You are a software architect. Plan the full-stack architecture for this project.
+
+PROJECT REQUIREMENTS:
+${enrichedPrompt}
+
+EXISTING TASKS:
+${tasksDetailArray.map((t, idx) => `${idx + 1}. ${t.task}: ${t.instruction || ""}`).join("\n")}
+
+Respond with ONLY valid JSON adhering to this exact schema (no markdown fencing, no explanations, no comments):
+{
+  "tasks": [
+    {
+      "task": "Task Name",
+      "layer": "client",
+      "files": ["client/src/App.jsx"],
+      "instruction": "Specific instructions"
+    }
+  ],
+  "apiRoutes": [
+    {
+      "method": "GET",
+      "path": "/api/example",
+      "request": {},
+      "response": {}
+    }
+  ],
+  "envVars": ["VITE_API_URL"],
+  "dbSchema": {},
+  "rules": {
+    "tailwind": "v3 only, use @tailwind base/components/utilities",
+    "moduleSystem": "server uses CommonJS require",
+    "apiBaseUrl": "client reads import.meta.env.VITE_API_URL"
+  }
+}`;
+
+        const planOpenAi = buildOpenAiMessages([], plannerPrompt, SYSTEM_PROMPT);
+        const planGemini = buildGeminiContents([], plannerPrompt);
+
+        for (const { modelId, provider } of plannerCandidates) {
+          try {
+            console.log(`[chatResponse][Planner] Calling ${provider} [${modelId}] via modelQueue...`);
+            const planText = await executeModelCall({
+              modelId,
+              provider,
+              promptText: plannerPrompt,
+              openAiMessages: planOpenAi,
+              geminiContents: planGemini,
+              activeSystemPrompt: SYSTEM_PROMPT,
+              estimatedTokens: 1000,
+            });
+
+            if (planText && planText.trim()) {
+              const rawJson = planText.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+              const parsed = cleanJsonComments(rawJson);
+              if (
+                parsed &&
+                typeof parsed === "object" &&
+                Array.isArray(parsed.tasks) &&
+                parsed.rules &&
+                typeof parsed.rules === "object"
+              ) {
+                plannerSpec = parsed;
+                plannerSpecStr = JSON.stringify(parsed, null, 2);
+                console.log(`[chatResponse][Planner] Valid planner spec obtained from ${provider} [${modelId}]`);
+                break;
+              }
+            }
+          } catch (planErr) {
+            console.warn(`[chatResponse][Planner] Model ${provider} [${modelId}] failed: ${planErr.message}`);
+          }
+        }
+      } catch (err) {
+        console.warn("[chatResponse][Planner] Planner step skipped:", err.message);
+        plannerSpec = null;
+      }
+
       const parallelTaskPromises = tasksDetailArray.map(async (taskItem, index) => {
         const taskName = taskItem.task || `Module ${index + 1}`;
         const taskInstruction = taskItem.instruction || "";
         const rawModels = taskItem.models || [];
+
+        // Match layer from planner spec if available
+        let taskLayer = null;
+        if (plannerSpec && Array.isArray(plannerSpec.tasks)) {
+          const matchedPlanTask = plannerSpec.tasks.find(
+            (pt) => pt && pt.task && (pt.task.toLowerCase() === taskName.toLowerCase() || taskName.toLowerCase().includes(pt.task.toLowerCase()) || pt.task.toLowerCase().includes(taskName.toLowerCase()))
+          ) || plannerSpec.tasks[index];
+          if (matchedPlanTask && ["client", "server", "database"].includes(matchedPlanTask.layer)) {
+            taskLayer = matchedPlanTask.layer;
+          }
+        }
 
         // Build candidate list for this specific task
         const taskCandidates = [];
@@ -785,11 +913,17 @@ const handleChatResponse = async (req, res) => {
         }
 
         // Specialized prompt for this component chain
-        const subtaskPrompt = `You are a specialized AI software engineer responsible for building the "${taskName}" component of the following project.
+        let subtaskPrompt = `You are a specialized AI software engineer responsible for building the "${taskName}" component of the following project.
 
 OVERALL PROJECT REQUIREMENTS:
 ${enrichedPrompt}
+`;
 
+        if (plannerSpecStr) {
+          subtaskPrompt += `\nSHARED PROJECT CONTRACT (must follow exactly):\n${plannerSpecStr}\n`;
+        }
+
+        subtaskPrompt += `
 YOUR ASSIGNED COMPONENT:
 Component Name: ${taskName}
 ${taskInstruction ? `Component Focus & Instructions: ${taskInstruction}` : ""}
@@ -842,6 +976,7 @@ CRITICAL REQUIREMENTS & FILE STRUCTURE RULES:
 
         return {
           task: taskName,
+          layer: taskLayer,
           instruction: taskInstruction,
           code: taskContent || `// ${taskName}: Code generation could not be completed due to upstream rate limits.`,
           modelUsed: taskModelUsed || { model: "emergency-fallback", provider: "none" },
@@ -876,10 +1011,10 @@ CRITICAL REQUIREMENTS & FILE STRUCTURE RULES:
         }
       }
       for (const r of taskResults) {
-        const extracted = extractFilesFromCode(r.code, r.task);
+        const extracted = extractFilesFromCode(r.code, r.task, r.layer);
         r.extractedFiles = extracted;
         for (const f of extracted) {
-          const canonPath = canonicalizeFilePath(f.path, r.task);
+          const canonPath = canonicalizeFilePath(f.path, r.task, r.layer);
           if (!canonPath) continue;
 
           if (fileMap.has(canonPath)) {
@@ -1888,7 +2023,7 @@ Return ONLY full corrected files, each labeled with exact path as ### \`path\` f
       context: chat.context,
       messages: chat.messages,
       isMultiModelTask: isMultiModel,
-      tasksDetailArray: multiModelTaskResults || [],
+      tasksDetailArray: multiModelTaskResults ? multiModelTaskResults.map(({ layer, ...rest }) => rest) : [],
       runInstructionModel: instructionModelUsed,
       file: fileAttachment,
     });
