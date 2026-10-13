@@ -354,6 +354,8 @@ function generateProjectSlug(promptText, context, isUpdate, previousZipName) {
   return fallback || "arixel-project";
 }
 
+const has = (s, ...w) => Boolean(s && typeof s === "string" && w.some((x) => new RegExp(`\\b${x}\\b`, "i").test(s)));
+
 /**
  * Normalizes and canonicalizes file paths to guarantee clean, non-duplicated full-stack project layouts:
  * - Client config files (package.json, vite.config.js, tailwind.config.js, index.html) belong in client/ (NEVER in client/src/).
@@ -363,24 +365,31 @@ function generateProjectSlug(promptText, context, isUpdate, previousZipName) {
  */
 function canonicalizeFilePath(rawPath, fallbackTaskName, layerOverride) {
   if (!rawPath) return null;
-  let p = rawPath.replace(/\\/g, "/").replace(/^\/+/, "").trim();
+  let p = rawPath.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+/g, "/").trim();
+  if (p.startsWith("frontend/")) p = "client/" + p.substring(9);
+  if (p.startsWith("backend/")) p = "server/" + p.substring(8);
+
   const taskLower = (fallbackTaskName || "").toLowerCase();
-  const isFrontend = layerOverride
-    ? (layerOverride === "client" || layerOverride === "frontend")
-    : (taskLower.includes("front") || taskLower.includes("ui") || taskLower.includes("client") || taskLower.includes("tailwind") || taskLower.includes("layout"));
-  const isBackend = layerOverride
-    ? (layerOverride === "server" || layerOverride === "backend")
-    : (taskLower.includes("back") || taskLower.includes("api") || taskLower.includes("server") || taskLower.includes("rest") || taskLower.includes("controller") || taskLower.includes("route"));
-  const isDatabase = layerOverride
-    ? (layerOverride === "database" || layerOverride === "db")
-    : (taskLower.includes("data") || taskLower.includes("db") || taskLower.includes("schema") || taskLower.includes("sql") || taskLower.includes("mongo") || taskLower.includes("postgres"));
+  let isBackend = false;
+  let isDatabase = false;
+  let isFrontend = false;
+
+  if (layerOverride) {
+    if (layerOverride === "server" || layerOverride === "backend") isBackend = true;
+    else if (layerOverride === "database" || layerOverride === "db") isDatabase = true;
+    else if (layerOverride === "client" || layerOverride === "frontend") isFrontend = true;
+  } else {
+    isBackend = has(taskLower, "back", "backend", "api", "server", "rest", "controller", "route");
+    isDatabase = !isBackend && has(taskLower, "database", "db", "schema", "sql", "mongo", "postgres");
+    isFrontend = !isBackend && !isDatabase && has(taskLower, "front", "frontend", "ui", "client", "tailwind", "layout");
+  }
 
   const clientRootFiles = ["package.json", "package-lock.json", "vite.config.js", "vite.config.ts", "tailwind.config.js", "postcss.config.js", "index.html", ".env", ".env.example", ".env.local"];
   const serverRootFiles = ["package.json", "package-lock.json", "server.js", "index.js", "app.js", ".env", ".env.example"];
 
   // Normalize root client config files (prevent them from ever being misplaced in client/src/)
   for (const rf of clientRootFiles) {
-    if (p === `client/src/${rf}` || p === `frontend/src/${rf}` || p === `client/${rf}` || p === `frontend/${rf}`) {
+    if (p === `client/src/${rf}` || p === `client/${rf}`) {
       return `client/${rf}`;
     }
     if (isFrontend && (p === rf || p === `src/${rf}`)) {
@@ -390,7 +399,7 @@ function canonicalizeFilePath(rawPath, fallbackTaskName, layerOverride) {
 
   // Normalize root server config files (prevent them from ever being misplaced in server/src/)
   for (const rf of serverRootFiles) {
-    if (p === `server/src/${rf}` || p === `backend/src/${rf}` || p === `server/${rf}` || p === `backend/${rf}`) {
+    if (p === `server/src/${rf}` || p === `server/${rf}`) {
       return `server/${rf === "app.js" || rf === "index.js" ? "server.js" : rf}`;
     }
     if (isBackend && (p === rf || p === `src/${rf}`)) {
@@ -398,30 +407,33 @@ function canonicalizeFilePath(rawPath, fallbackTaskName, layerOverride) {
     }
   }
 
-  if (isFrontend) {
-    p = p.replace(/^(?:frontend|client)\//, "");
-    if (!p.startsWith("src/")) {
-      p = `src/${p}`;
-    }
-    return `client/${p}`.replace(/\/+/g, "/");
-  }
-
-  if (isBackend) {
-    p = p.replace(/^(?:backend|server)\//, "");
-    if (p.startsWith("src/")) {
-      p = p.replace(/^src\//, "");
-    }
-    return `server/${p}`.replace(/\/+/g, "/");
-  }
-
-  if (isDatabase) {
-    if (!p.startsWith("database/") && !p.startsWith("server/")) {
-      return p.endsWith(".sql") ? `database/${p}` : `server/models/${p}`;
-    }
+  // If path already starts with client/, server/ or database/, TRUST it and return it
+  if (p.startsWith("client/") || p.startsWith("server/") || p.startsWith("database/")) {
     return p;
   }
 
-  return p.replace(/\/+/g, "/");
+  if (isFrontend) {
+    if (p.startsWith("public/")) {
+      return `client/${p}`;
+    }
+    if (!p.startsWith("src/")) {
+      p = `src/${p}`;
+    }
+    return `client/${p}`;
+  }
+
+  if (isBackend) {
+    if (p.startsWith("src/")) {
+      p = p.replace(/^src\//, "");
+    }
+    return `server/${p}`;
+  }
+
+  if (isDatabase) {
+    return p.endsWith(".sql") ? `database/${p}` : `server/models/${p}`;
+  }
+
+  return p;
 }
 
 /**
@@ -553,15 +565,19 @@ function extractFilesFromCode(rawText, fallbackTaskName, layerOverride) {
   }
 
   const taskLower = (fallbackTaskName || "").toLowerCase();
-  const isFrontend = layerOverride
-    ? (layerOverride === "client" || layerOverride === "frontend")
-    : (taskLower.includes("front") || taskLower.includes("ui") || taskLower.includes("client") || taskLower.includes("tailwind") || taskLower.includes("layout"));
-  const isBackend = layerOverride
-    ? (layerOverride === "server" || layerOverride === "backend")
-    : (taskLower.includes("back") || taskLower.includes("api") || taskLower.includes("server") || taskLower.includes("rest") || taskLower.includes("controller") || taskLower.includes("route"));
-  const isDatabase = layerOverride
-    ? (layerOverride === "database" || layerOverride === "db")
-    : (taskLower.includes("data") || taskLower.includes("db") || taskLower.includes("schema") || taskLower.includes("sql") || taskLower.includes("mongo") || taskLower.includes("postgres"));
+  let isBackend = false;
+  let isDatabase = false;
+  let isFrontend = false;
+
+  if (layerOverride) {
+    if (layerOverride === "server" || layerOverride === "backend") isBackend = true;
+    else if (layerOverride === "database" || layerOverride === "db") isDatabase = true;
+    else if (layerOverride === "client" || layerOverride === "frontend") isFrontend = true;
+  } else {
+    isBackend = has(taskLower, "back", "backend", "api", "server", "rest", "controller", "route");
+    isDatabase = !isBackend && has(taskLower, "database", "db", "schema", "sql", "mongo", "postgres");
+    isFrontend = !isBackend && !isDatabase && has(taskLower, "front", "frontend", "ui", "client", "tailwind", "layout");
+  }
 
   const normalizedFiles = [];
   let unnamedIndex = 1;
@@ -2036,4 +2052,4 @@ Return ONLY full corrected files, each labeled with exact path as ### \`path\` f
   }
 };
 
-module.exports = { handleChatResponse };
+module.exports = { handleChatResponse, canonicalizeFilePath, has };
