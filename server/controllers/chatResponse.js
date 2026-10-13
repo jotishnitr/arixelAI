@@ -1661,14 +1661,23 @@ ${hasClient ? `2. Setup and run Frontend:
       }
     }
 
-    // Check if user requested live deployment in their prompt
-    const wantsDeployment = /\b(deploy|launch|host|live\s*url|publish|vercel|render)\b/i.test(promptText || "");
+    // Check if user requested live deployment in their prompt, or if this is a bug fix / update to an already-deployed project
+    const hadPreviousDeployment = (historyList || []).some(
+      (m) =>
+        m.deployment?.url ||
+        (typeof m.content === "string" && (m.content.includes("vercel.app") || m.content.includes("Live Deployment")))
+    );
+    const wantsDeployment =
+      /\b(deploy|launch|host|live\s*url|publish|vercel|render)\b/i.test(promptText || "") ||
+      (hadPreviousDeployment && isBugFixOrUpdateIntent);
 
+    let deployedResult = null;
     if (wantsDeployment && hasClientFiles && activeFileMap && activeFileMap.size > 0) {
       console.log(`[chatResponse] Deploying project "${activeProjectSlug}" to Vercel...`);
       const vercelResult = await deployToVercel(activeProjectSlug, activeFileMap);
 
       if (vercelResult.success) {
+        deployedResult = { platform: "vercel", url: vercelResult.url };
         finalResponse += `\n\n---\n\n🚀 **Live Deployment**: Your frontend has been deployed live on Vercel!\n🔗 **Preview URL**: [${vercelResult.url}](${vercelResult.url})`;
       } else {
         console.warn("[chatResponse] Vercel deploy error:", vercelResult.error);
@@ -1708,6 +1717,7 @@ ${hasClient ? `2. Setup and run Frontend:
       tokensUsed: actualTokens,
       modelUsed: successfulModel,
       ...(fileAttachment ? { attachment: fileAttachment } : {}),
+      ...(deployedResult ? { deployment: deployedResult } : {}),
     });
 
     // Clean up any historical messages that might have oversized raw base64 from earlier requests

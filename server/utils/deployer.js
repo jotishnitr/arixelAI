@@ -76,8 +76,21 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 `;
 
+// Mapping of frequently hallucinated packages to real npm packages
+const KNOWN_PACKAGE_CORRECTIONS = {
+  "@lucide/react": "lucide-react",
+  "@lucide-react": "lucide-react",
+  "lucide": "lucide-react",
+  "@heroicons": "@heroicons/react",
+  "font-awesome": "@fortawesome/fontawesome-free",
+  "tailwind": "tailwindcss",
+  "@tailwind": "tailwindcss",
+  "@tailwindcss/vite": "@tailwindcss/postcss",
+};
+
 /**
- * Normalizes client package.json by merging standard baseline packages with model requirements.
+ * Normalizes client package.json by merging standard baseline packages with model requirements
+ * and sanitizing any hallucinated package names.
  */
 function prepareClientPackageJson(rawStr, projectName) {
   let pkg = {};
@@ -89,11 +102,27 @@ function prepareClientPackageJson(rawStr, projectName) {
     }
   }
 
+  const rawDeps = pkg.dependencies || {};
+  const cleanedModelDeps = {};
+  for (const [depName, version] of Object.entries(rawDeps)) {
+    const fixed = KNOWN_PACKAGE_CORRECTIONS[depName] || depName;
+    if (fixed.startsWith("@types/")) continue;
+    cleanedModelDeps[fixed] = version;
+  }
+
+  const rawDevDeps = pkg.devDependencies || {};
+  const cleanedModelDevDeps = {};
+  for (const [depName, version] of Object.entries(rawDevDeps)) {
+    const fixed = KNOWN_PACKAGE_CORRECTIONS[depName] || depName;
+    if (fixed.startsWith("@types/")) continue;
+    cleanedModelDevDeps[fixed] = version;
+  }
+
   const mergedDeps = {
     react: "^18.3.1",
     "react-dom": "^18.3.1",
     "lucide-react": "^0.344.0",
-    ...(pkg.dependencies || {}),
+    ...cleanedModelDeps,
   };
 
   const mergedDevDeps = {
@@ -102,12 +131,18 @@ function prepareClientPackageJson(rawStr, projectName) {
     tailwindcss: "^3.4.10",
     postcss: "^8.4.41",
     autoprefixer: "^10.4.20",
-    ...(pkg.devDependencies || {}),
+    ...cleanedModelDevDeps,
   };
 
-  // Strip conflicting types that may break pure JS Vite setups
+  // Strip conflicting types and hallucinated scoped names
+  delete mergedDeps["@lucide/react"];
+  delete mergedDeps["@lucide-react"];
   delete mergedDeps["@types/react"];
   delete mergedDeps["@types/react-dom"];
+  delete mergedDevDeps["@lucide/react"];
+  delete mergedDevDeps["@lucide-react"];
+  delete mergedDevDeps["@types/react"];
+  delete mergedDevDeps["@types/react-dom"];
 
   const finalPkg = {
     name: projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "frontend-app",
@@ -195,7 +230,11 @@ function scaffoldClientFiles(fileMap, projectName) {
           finalName = finalName.replace(/\.js$/, ".jsx");
         }
       }
-      vercelFiles.push({ file: finalName, data: content });
+      let fileContent = content;
+      if (typeof fileContent === "string" && (finalName.endsWith(".jsx") || finalName.endsWith(".js") || finalName.endsWith(".tsx"))) {
+        fileContent = fileContent.replace(/(['"])@lucide\/react\1/g, "$1lucide-react$1");
+      }
+      vercelFiles.push({ file: finalName, data: fileContent });
       processedKeys.add(finalName);
     }
   }
@@ -220,7 +259,11 @@ function scaffoldClientFiles(fileMap, projectName) {
             finalName = finalName.replace(/\.js$/, ".jsx");
           }
         }
-        vercelFiles.push({ file: finalName, data: content });
+        let fileContent = content;
+        if (typeof fileContent === "string" && (finalName.endsWith(".jsx") || finalName.endsWith(".js") || finalName.endsWith(".tsx"))) {
+          fileContent = fileContent.replace(/(['"])@lucide\/react\1/g, "$1lucide-react$1");
+        }
+        vercelFiles.push({ file: finalName, data: fileContent });
         processedKeys.add(finalName);
       }
     }
@@ -305,8 +348,8 @@ function autoStubMissingImports(filesList) {
         `${target}/index.js`,
       ];
 
-      const exists = candidates.some((c) => filePaths.has(c));
-      if (!exists) {
+      const matchedCandidate = candidates.find((c) => filePaths.has(c));
+      if (!matchedCandidate) {
         const isModule = target.includes("/ml/") || target.includes("/services/") || target.includes("/utils/") || target.includes("/lib/");
         const stubPath = isModule
           ? (target.endsWith(".js") ? target : `${target}.js`)
@@ -315,7 +358,7 @@ function autoStubMissingImports(filesList) {
         if (!filePaths.has(stubPath)) {
           filePaths.add(stubPath);
           const componentName = defaultImport || "Component";
-          const namedExportsStr = namedImports.map((n) => `export const ${n} = () => null;`).join("\n");
+          const namedExportsStr = namedImports.map((n) => `export const ${n} = (...args) => [];`).join("\n");
           let stubCode = "";
           if (isModule) {
             stubCode = `// Auto-generated fallback module
@@ -337,7 +380,42 @@ export default function ${componentName}(props) {
 ${namedExportsStr}
 `;
           }
+
           newStubs.push({ file: stubPath, data: stubCode });
+        }
+      } else {
+        // File exists; verify that all imported identifiers are exported to prevent Rollup build crashes
+        const targetEntry =
+          filesList.find((entry) => entry.file === matchedCandidate) ||
+          newStubs.find((entry) => entry.file === matchedCandidate);
+
+        if (targetEntry && typeof targetEntry.data === "string") {
+          let targetCode = targetEntry.data;
+          let changed = false;
+
+          for (const named of namedImports) {
+            const hasNamed = new RegExp(
+              `export\\s+(?:const|let|var|function|class)\\s+${named}\\b|export\\s*\\{[^}]*\\b${named}\\b`
+            ).test(targetCode);
+            if (!hasNamed) {
+              console.log(`[deployer] Auto-stubbing missing named export "${named}" in ${matchedCandidate}`);
+              targetCode += `\nexport const ${named} = (...args) => [];\n`;
+              changed = true;
+            }
+          }
+
+          if (defaultImport) {
+            const hasDefault = /export\s+default\b/.test(targetCode);
+            if (!hasDefault) {
+              console.log(`[deployer] Auto-stubbing missing default export "${defaultImport}" in ${matchedCandidate}`);
+              targetCode += `\nexport default function ${defaultImport}(props) { return null; }\n`;
+              changed = true;
+            }
+          }
+
+          if (changed) {
+            targetEntry.data = targetCode;
+          }
         }
       }
     }
