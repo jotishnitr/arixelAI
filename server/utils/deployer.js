@@ -8,10 +8,20 @@
 
 const STANDARD_VITE_CONFIG = `import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   plugins: [react()],
   base: '/',
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -92,7 +102,7 @@ const KNOWN_PACKAGE_CORRECTIONS = {
  * Normalizes client package.json by merging standard baseline packages with model requirements
  * and sanitizing any hallucinated package names.
  */
-function prepareClientPackageJson(rawStr, projectName) {
+function prepareClientPackageJson(rawStr, projectName, extraPackages = {}) {
   let pkg = {};
   if (rawStr) {
     try {
@@ -122,6 +132,9 @@ function prepareClientPackageJson(rawStr, projectName) {
     react: "^18.3.1",
     "react-dom": "^18.3.1",
     "lucide-react": "^0.344.0",
+    clsx: "^2.1.1",
+    "tailwind-merge": "^2.5.2",
+    ...extraPackages,
     ...cleanedModelDeps,
   };
 
@@ -269,18 +282,10 @@ function scaffoldClientFiles(fileMap, projectName) {
     }
   }
 
-  // Inject standardized, rock-solid configuration files
-  vercelFiles.push({ file: "package.json", data: prepareClientPackageJson(rawPkg, projectName) });
-  vercelFiles.push({ file: "vite.config.js", data: STANDARD_VITE_CONFIG });
-  vercelFiles.push({ file: "postcss.config.js", data: STANDARD_POSTCSS_CONFIG });
-  if (!processedKeys.has("tailwind.config.js") && !processedKeys.has("tailwind.config.ts")) {
-    vercelFiles.push({ file: "tailwind.config.js", data: STANDARD_TAILWIND_CONFIG });
-  }
-  vercelFiles.push({ file: "vercel.json", data: STANDARD_VERCEL_JSON });
-
-  // Ensure index.html exists
-  if (!hasHtml) {
-    vercelFiles.push({
+  // 1. Ensure index.html exists AND contains <div id="root"> and <script type="module" src="/src/main.jsx"></script>
+  let htmlEntry = vercelFiles.find((f) => f.file === "index.html");
+  if (!htmlEntry) {
+    htmlEntry = {
       file: "index.html",
       data: `<!DOCTYPE html>
 <html lang="en">
@@ -295,8 +300,81 @@ function scaffoldClientFiles(fileMap, projectName) {
   </body>
 </html>
 `,
-    });
+    };
+    vercelFiles.push(htmlEntry);
+  } else {
+    let html = htmlEntry.data || "";
+    if (!html.includes('id="root"') && !html.includes("id='root'")) {
+      if (html.includes("</body>")) {
+        html = html.replace("</body>", '  <div id="root"></div>\n</body>');
+      } else {
+        html += '\n<div id="root"></div>';
+      }
+    }
+    if (!html.includes("src/main.") && !html.includes("main.jsx") && !html.includes("main.js")) {
+      if (html.includes("</body>")) {
+        html = html.replace("</body>", '  <script type="module" src="/src/main.jsx"></script>\n</body>');
+      } else {
+        html += '\n<script type="module" src="/src/main.jsx"></script>';
+      }
+    } else {
+      // Normalize relative or non-root script path to /src/main.jsx
+      html = html.replace(/src=["'](?:\.\/)?(?:src\/)?main\.(?:jsx?|tsx?)["']/g, 'src="/src/main.jsx"');
+    }
+    htmlEntry.data = html;
   }
+
+  // 2. Ensure src/main.jsx exists
+  const hasMain = vercelFiles.some((f) => f.file === "src/main.jsx");
+  if (!hasMain) {
+    const altMain = vercelFiles.find((f) => f.file === "src/main.js" || f.file === "src/index.js" || f.file === "src/index.jsx");
+    if (altMain && typeof altMain.data === "string") {
+      vercelFiles.push({ file: "src/main.jsx", data: altMain.data });
+    } else {
+      vercelFiles.push({
+        file: "src/main.jsx",
+        data: `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+`,
+      });
+    }
+  }
+
+  // 3. Ensure src/index.css exists with Tailwind directives
+  const cssEntry = vercelFiles.find((f) => f.file === "src/index.css");
+  if (!cssEntry) {
+    vercelFiles.push({
+      file: "src/index.css",
+      data: `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n`,
+    });
+  } else if (typeof cssEntry.data === "string" && !cssEntry.data.includes("@tailwind")) {
+    cssEntry.data = `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\n${cssEntry.data}`;
+  }
+
+  // 4. Auto-detect common npm libraries in source files
+  const allCode = vercelFiles.map((f) => f.data).join("\n");
+  const autoPackages = {};
+  if (allCode.includes("react-router-dom")) autoPackages["react-router-dom"] = "^6.26.1";
+  if (allCode.includes("axios")) autoPackages["axios"] = "^1.7.7";
+  if (allCode.includes("framer-motion")) autoPackages["framer-motion"] = "^11.5.4";
+  if (allCode.includes("canvas-confetti")) autoPackages["canvas-confetti"] = "^1.9.3";
+
+  // Inject standardized, rock-solid configuration files
+  vercelFiles.push({ file: "package.json", data: prepareClientPackageJson(rawPkg, projectName, autoPackages) });
+  vercelFiles.push({ file: "vite.config.js", data: STANDARD_VITE_CONFIG });
+  vercelFiles.push({ file: "postcss.config.js", data: STANDARD_POSTCSS_CONFIG });
+  if (!processedKeys.has("tailwind.config.js") && !processedKeys.has("tailwind.config.ts")) {
+    vercelFiles.push({ file: "tailwind.config.js", data: STANDARD_TAILWIND_CONFIG });
+  }
+  vercelFiles.push({ file: "vercel.json", data: STANDARD_VERCEL_JSON });
 
   return autoStubMissingImports(vercelFiles);
 }
@@ -314,8 +392,8 @@ function autoStubMissingImports(filesList) {
     const content = f.data;
     if (typeof content !== "string") continue;
 
-    // Matches relative imports: import X from './...' or import { X } from '../...'
-    const importRegex = /import\s+(?:([A-Za-z0-9_$]+)\s*,?\s*)?(?:\{([^}]+)\})?\s+from\s+['"](\.[^'"]+)['"]/g;
+    // Matches relative imports: ./, ../, or @/
+    const importRegex = /import\s+(?:([A-Za-z0-9_$]+)\s*,?\s*)?(?:\{([^}]+)\})?\s+from\s+['"]([.@][^'"]+)['"]/g;
     let match;
     const dir = f.file.includes("/") ? f.file.substring(0, f.file.lastIndexOf("/")) : "";
 
@@ -329,14 +407,19 @@ function autoStubMissingImports(filesList) {
         : [];
       const relPath = match[3];
 
-      let target = (dir ? `${dir}/${relPath}` : relPath).replace(/\/\.\//g, "/");
-      const parts = target.split("/");
-      const resolved = [];
-      for (const p of parts) {
-        if (p === "..") resolved.pop();
-        else if (p !== ".") resolved.push(p);
+      let target = "";
+      if (relPath.startsWith("@/")) {
+        target = "src/" + relPath.substring(2);
+      } else {
+        target = (dir ? `${dir}/${relPath}` : relPath).replace(/\/\.\//g, "/");
+        const parts = target.split("/");
+        const resolved = [];
+        for (const p of parts) {
+          if (p === "..") resolved.pop();
+          else if (p !== ".") resolved.push(p);
+        }
+        target = resolved.join("/");
       }
-      target = resolved.join("/");
 
       const candidates = [
         target,
@@ -360,7 +443,17 @@ function autoStubMissingImports(filesList) {
           const componentName = defaultImport || "Component";
           const namedExportsStr = namedImports.map((n) => `export const ${n} = (...args) => [];`).join("\n");
           let stubCode = "";
-          if (isModule) {
+          if (target.includes("utils") && namedImports.includes("cn")) {
+            stubCode = `import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs) {
+  return twMerge(clsx(inputs));
+}
+export default function ${componentName}() { return {}; }
+${namedExportsStr}
+`;
+          } else if (isModule) {
             stubCode = `// Auto-generated fallback module
 export default function ${componentName}() { return {}; }
 ${namedExportsStr}
