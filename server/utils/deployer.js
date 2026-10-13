@@ -853,8 +853,24 @@ async function createGitHubRepoAndPush({ token, repoName, fileMap, description =
   }
 }
 
+async function deployWithRepair(slug, fileMap, envVars, repairFn, maxTries = 3) {
+  for (let i = 0; i < maxTries; i++) {
+    const res = await deployToVercel(slug, fileMap, envVars);
+    if (res.success) return res;
+    if (!res.buildLog || typeof repairFn !== "function") return res;
+    let fixes;
+    try { fixes = await repairFn(res.buildLog, fileMap); } catch { return res; }
+    if (!fixes || typeof fixes !== "object" || Object.keys(fixes).length === 0) return res;
+    for (const [p, c] of Object.entries(fixes)) {
+      if (typeof c === "string" && c.trim()) fileMap.set(p, c);
+    }
+  }
+  return { success: false, error: "Build failed after repair attempts" };
+}
+
 module.exports = {
   deployToVercel,
   deployToRender,
   createGitHubRepoAndPush,
+  deployWithRepair,
 };

@@ -9,7 +9,7 @@ const tokenCounter = require("../utils/tokenCounter");
 const { extractAttachmentText, sanitizeAttachmentForDb } = require("../utils/attachmentHelper");
 const { getRelevantChunks } = require("../utils/document_chunks");
 const JSZip = require("jszip");
-const { deployToVercel, deployToRender } = require("../utils/deployer");
+const { deployToVercel, deployToRender, deployWithRepair } = require("../utils/deployer");
 
 
 const SYSTEM_PROMPT = `You are ArixelCore-1o, the flagship AI model developed by ArixelAI, founded by Jotish Kumar.
@@ -1673,14 +1673,160 @@ ${hasClient ? `2. Setup and run Frontend:
 
     let deployedResult = null;
     if (wantsDeployment && hasClientFiles && activeFileMap && activeFileMap.size > 0) {
-      console.log(`[chatResponse] Deploying project "${activeProjectSlug}" to Vercel...`);
-      const vercelResult = await deployToVercel(activeProjectSlug, activeFileMap);
+      console.log(`[chatResponse] Deploying project "${activeProjectSlug}" to Vercel with repair loop...`);
+
+      const repairFn = async (buildLog, currentFileMap) => {
+        try {
+          const logLines = (buildLog || "").split("\n");
+          const recentLog = (logLines.length > 150 ? logLines.slice(-150) : logLines).join("\n");
+
+          const matchedSrcPaths = new Set();
+          const srcRegex = /(?:src\/[a-zA-Z0-9_.\-\/]+\.[a-zA-Z0-9_-]+)/g;
+          let sm;
+          while ((sm = srcRegex.exec(recentLog)) !== null) {
+            matchedSrcPaths.add(sm[0]);
+          }
+
+          const filesToRepair = [];
+          for (const srcPath of matchedSrcPaths) {
+            const clientKey = `client/${srcPath}`;
+            if (currentFileMap.has(clientKey)) {
+              filesToRepair.push({ path: clientKey, content: currentFileMap.get(clientKey) });
+            } else if (currentFileMap.has(srcPath)) {
+              filesToRepair.push({ path: srcPath, content: currentFileMap.get(srcPath) });
+            }
+          }
+
+          if (filesToRepair.length === 0) {
+            for (const fallbackKey of ["client/src/App.jsx", "client/src/main.jsx", "client/src/index.css"]) {
+              if (currentFileMap.has(fallbackKey)) {
+                filesToRepair.push({ path: fallbackKey, content: currentFileMap.get(fallbackKey) });
+              }
+            }
+          }
+
+          let fileContextStr = "";
+          for (const f of filesToRepair) {
+            const contentLines = (f.content || "").split("\n");
+            const cappedContent = contentLines.length > 400 ? contentLines.slice(0, 400).join("\n") : f.content;
+            fileContextStr += `\n### \`${f.path}\`\n\`\`\`\n${cappedContent}\n\`\`\`\n`;
+          }
+
+          const repairPrompt = `The project build failed on Vercel. Fix the following build errors.
+
+BUILD LOG:
+${recentLog}
+
+CURRENT FILE CONTENTS:
+${fileContextStr}
+
+Return ONLY full corrected files, each labeled with exact path as ### \`path\` followed by a fenced code block. No explanations.`;
+
+          const repairCandidates = [
+            { modelId: "gemini-3.7-flash", provider: "gemini" },
+            { modelId: "openai/gpt-oss-120b", provider: "groq" },
+            ...emergencyFallbacks,
+          ];
+
+          let repairResponseText = "";
+          let repairModelUsed = null;
+
+          for (const cand of repairCandidates) {
+            try {
+              const resText = await executeModelCall({
+                modelId: cand.modelId,
+                provider: cand.provider,
+                promptText: repairPrompt,
+                openAiMessages: buildOpenAiMessages([], repairPrompt, SYSTEM_PROMPT),
+                geminiContents: buildGeminiContents([], repairPrompt),
+                activeSystemPrompt: SYSTEM_PROMPT,
+                estimatedTokens: 1500,
+              });
+
+              if (resText && resText.trim()) {
+                repairResponseText = resText.trim();
+                repairModelUsed = cand;
+                break;
+              }
+            } catch (err) {
+              console.warn(`[chatResponse][repair] Candidate ${cand.provider} [${cand.modelId}] failed: ${err.message}`);
+            }
+          }
+
+          if (repairModelUsed && repairResponseText) {
+            const repairToks = tokenCounter.estimateTokens(repairResponseText) + 120;
+            actualTokens += repairToks;
+
+            if (dbUserId && repairModelUsed.provider !== "none") {
+              try {
+                const prov = repairModelUsed.provider.toLowerCase();
+                const providerFieldMap = {
+                  gemini: "dailyGeminiTokenUsed",
+                  groq: "dailyGroqTokenUsed",
+                  openrouter: "dailyOpenRouterTokenUsed",
+                };
+                const updateFields = {
+                  $inc: {
+                    dailyTotalTokensUsed: repairToks,
+                    lifetimeTotalTokensUsed: repairToks,
+                  },
+                };
+                if (providerFieldMap[prov]) {
+                  updateFields.$inc[providerFieldMap[prov]] = repairToks;
+                }
+                const schemaModelsMap = {
+                  gemini: "geminiModels",
+                  groq: "groqModels",
+                  openrouter: "openRouterModels",
+                };
+                const modelsArrayKey = schemaModelsMap[prov] || `${prov}Models`;
+                const updateResult = await User.updateOne(
+                  { _id: dbUserId, [`${modelsArrayKey}.model`]: repairModelUsed.model },
+                  {
+                    ...updateFields,
+                    $inc: {
+                      ...updateFields.$inc,
+                      [`${modelsArrayKey}.$.dailyTokensUsed`]: repairToks,
+                      [`${modelsArrayKey}.$.totalTokensUsed`]: repairToks,
+                    },
+                  }
+                );
+                if (updateResult.matchedCount === 0) {
+                  await User.updateOne({ _id: dbUserId }, updateFields);
+                }
+              } catch (tokErr) {
+                console.warn("[chatResponse] Failed to update token count for repair model:", tokErr.message);
+              }
+            }
+          }
+
+          if (!repairResponseText) return {};
+
+          const extracted = extractFilesFromCode(repairResponseText, "Frontend Repair");
+          const fixes = {};
+          for (const file of extracted) {
+            const canon = canonicalizeFilePath(file.path, "Frontend Repair");
+            if (canon && file.content) {
+              fixes[canon] = file.content;
+            }
+          }
+          return fixes;
+        } catch (repairErr) {
+          console.warn("[chatResponse] repairFn encountered error:", repairErr.message);
+          return {};
+        }
+      };
+
+      const vercelResult = await deployWithRepair(activeProjectSlug, activeFileMap, {}, repairFn);
 
       if (vercelResult.success) {
         deployedResult = { platform: "vercel", url: vercelResult.url };
         finalResponse += `\n\n---\n\n🚀 **Live Deployment**: Your frontend has been deployed live on Vercel!\n🔗 **Preview URL**: [${vercelResult.url}](${vercelResult.url})`;
       } else {
         console.warn("[chatResponse] Vercel deploy error:", vercelResult.error);
+        const logLines = (vercelResult.buildLog || "").split("\n").filter(Boolean);
+        const snippet = logLines.length > 20 ? logLines.slice(-20).join("\n") : (vercelResult.buildLog || vercelResult.error || "Deployment failed");
+        finalResponse += `\n\n---\n\n⚠️ **Live Deployment Failed**: ${vercelResult.error || "Build error"}\n<details><summary>Build Log (Last 20 lines)</summary>\n\n\`\`\`\n${snippet}\n\`\`\`\n</details>`;
       }
     }
 
