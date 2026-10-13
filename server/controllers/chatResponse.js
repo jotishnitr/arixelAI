@@ -182,6 +182,7 @@ async function executeModelCall({
   geminiContents,
   activeSystemPrompt,
   estimatedTokens,
+  maxTokens,
 }) {
   return await executeWithModelQueue({
     model: modelId,
@@ -189,12 +190,16 @@ async function executeModelCall({
     estimatedTokens,
     fn: async () => {
       if (provider === "gemini") {
+        const config = {
+          systemInstruction: activeSystemPrompt,
+        };
+        if (maxTokens) {
+          config.maxOutputTokens = maxTokens;
+        }
         const result = await gemini.models.generateContent({
           model: modelId,
           contents: geminiContents,
-          config: {
-            systemInstruction: activeSystemPrompt,
-          },
+          config,
         });
         return result?.text || result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
       }
@@ -236,11 +241,32 @@ async function executeModelCall({
       }
 
       if (provider === "groq") {
-        const completion = await groq.chat.completions.create({
+        const payload = {
           model: modelId,
           messages: openAiMessages,
-        });
-        return completion.choices?.[0]?.message?.content || "";
+        };
+        if (maxTokens) payload.max_tokens = maxTokens;
+        const completion = await groq.chat.completions.create(payload);
+        let content = completion.choices?.[0]?.message?.content || "";
+        if (maxTokens && completion.choices?.[0]?.finish_reason === "length") {
+          try {
+            const contMessages = [
+              ...openAiMessages,
+              { role: "assistant", content },
+              { role: "user", content: "Continue exactly where you stopped. Output only the remainder of the last file." },
+            ];
+            const contCompletion = await groq.chat.completions.create({
+              model: modelId,
+              messages: contMessages,
+              max_tokens: maxTokens,
+            });
+            const contContent = contCompletion.choices?.[0]?.message?.content || "";
+            content += contContent;
+          } catch (contErr) {
+            console.warn("[chatResponse] Groq continuation call failed soft:", contErr.message);
+          }
+        }
+        return content;
       }
 
       if (provider === "openrouter") {
@@ -276,11 +302,32 @@ async function executeModelCall({
           return `data:audio/mp3;base64,${base64Audio}`;
         }
 
-        const completion = await openrouter.chat.completions.create({
+        const payload = {
           model: modelId,
           messages: openAiMessages,
-        });
-        return completion.choices?.[0]?.message?.content || "";
+        };
+        if (maxTokens) payload.max_tokens = maxTokens;
+        const completion = await openrouter.chat.completions.create(payload);
+        let content = completion.choices?.[0]?.message?.content || "";
+        if (maxTokens && completion.choices?.[0]?.finish_reason === "length") {
+          try {
+            const contMessages = [
+              ...openAiMessages,
+              { role: "assistant", content },
+              { role: "user", content: "Continue exactly where you stopped. Output only the remainder of the last file." },
+            ];
+            const contCompletion = await openrouter.chat.completions.create({
+              model: modelId,
+              messages: contMessages,
+              max_tokens: maxTokens,
+            });
+            const contContent = contCompletion.choices?.[0]?.message?.content || "";
+            content += contContent;
+          } catch (contErr) {
+            console.warn("[chatResponse] OpenRouter continuation call failed soft:", contErr.message);
+          }
+        }
+        return content;
       }
 
       throw new Error(`Unsupported provider: ${provider}`);
@@ -449,6 +496,14 @@ function extractFilesFromCode(rawText, fallbackTaskName, layerOverride) {
   const files = [];
   if (!rawText || !rawText.trim()) return files;
 
+  let textToParse = rawText;
+  let wasTruncated = false;
+  const fenceMatches = textToParse.match(/```/g);
+  if (fenceMatches && fenceMatches.length % 2 !== 0) {
+    textToParse += "\n```";
+    wasTruncated = true;
+  }
+
   // Function to clean and validate a path candidate
   const cleanPath = (str) => {
     if (!str) return null;
@@ -492,13 +547,13 @@ function extractFilesFromCode(rawText, fallbackTaskName, layerOverride) {
   let lastIndex = 0;
   const codeBlocks = [];
 
-  while ((blockMatch = codeBlockRegex.exec(rawText)) !== null) {
+  while ((blockMatch = codeBlockRegex.exec(textToParse)) !== null) {
     const fullBlock = blockMatch[0];
     const lang = (blockMatch[1] || "").toLowerCase().trim();
     const infoString = blockMatch[2] || "";
     const codeContent = blockMatch[3] || "";
     const blockStart = blockMatch.index;
-    const textBefore = rawText.slice(lastIndex, blockStart);
+    const textBefore = textToParse.slice(lastIndex, blockStart);
     lastIndex = blockStart + fullBlock.length;
 
     // Skip shell/terminal commands (e.g. bash, sh, npm install snippets)
@@ -558,7 +613,7 @@ function extractFilesFromCode(rawText, fallbackTaskName, layerOverride) {
     }
   } else {
     // No code fences found, check raw text for comments
-    const subFiles = extractMultiFileComments(rawText);
+    const subFiles = extractMultiFileComments(textToParse);
     if (subFiles.length > 0) {
       files.push(...subFiles);
     }
@@ -607,6 +662,10 @@ function extractFilesFromCode(rawText, fallbackTaskName, layerOverride) {
     if (finalPath) {
       normalizedFiles.push({ path: finalPath, content });
     }
+  }
+
+  if (wasTruncated && normalizedFiles.length > 0) {
+    normalizedFiles[normalizedFiles.length - 1].truncated = true;
   }
 
   return normalizedFiles;
@@ -959,7 +1018,7 @@ CRITICAL REQUIREMENTS & FILE STRUCTURE RULES:
    \`\`\`
 5. Include all necessary dependencies, imports, functions, exports, handlers, and configurations required for this component.`;
 
-        const subtaskOpenAiMessages = buildOpenAiMessages(historyMessages, subtaskPrompt, activeSystemPrompt);
+        const subtaskOpenAiMessages = buildOpenAiMessages(historyMessages, subtaskPrompt, SYSTEM_PROMPT);
         const subtaskGeminiContents = buildGeminiContents(historyMessages, subtaskPrompt, attachment, docText);
         const subtaskEstimatedTokens = tokenCounter.calculateRequiredTokens(subtaskPrompt, historyMessages, 1200);
 
@@ -975,8 +1034,9 @@ CRITICAL REQUIREMENTS & FILE STRUCTURE RULES:
               promptText: subtaskPrompt,
               openAiMessages: subtaskOpenAiMessages,
               geminiContents: subtaskGeminiContents,
-              activeSystemPrompt,
+              activeSystemPrompt: SYSTEM_PROMPT,
               estimatedTokens: subtaskEstimatedTokens,
+              maxTokens: 8000,
             });
 
             if (resText && resText.trim()) {
@@ -1223,7 +1283,7 @@ Include:
 
 Format with clean Markdown headings, bullet points, and code blocks.`;
 
-      const instOpenAi = buildOpenAiMessages([], runInstructionsPrompt, activeSystemPrompt);
+      const instOpenAi = buildOpenAiMessages([], runInstructionsPrompt, SYSTEM_PROMPT);
       const instGemini = buildGeminiContents([], runInstructionsPrompt);
 
       for (const { modelId, provider } of instructionCandidates) {
@@ -1235,7 +1295,7 @@ Format with clean Markdown headings, bullet points, and code blocks.`;
             promptText: runInstructionsPrompt,
             openAiMessages: instOpenAi,
             geminiContents: instGemini,
-            activeSystemPrompt,
+            activeSystemPrompt: SYSTEM_PROMPT,
             estimatedTokens: 800,
           });
 
