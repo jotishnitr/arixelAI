@@ -8,6 +8,7 @@ const {
     handleGithubCallback,
     getAccessibleRepositories,
     disconnectGithub,
+    saveGithubToken,
 } = require("../controllers/githubCallback");
 
 // Permissive auth for OAuth callback navigation
@@ -33,6 +34,7 @@ router.get("/status", auth, getGithubStatus);
 router.get("/callback", callbackAuth, handleGithubCallback);
 router.get("/", callbackAuth, handleGithubCallback);
 router.get("/repositories", auth, getAccessibleRepositories);
+router.post("/token", auth, saveGithubToken);
 router.post("/disconnect", auth, disconnectGithub);
 
 module.exports = router;

@@ -294,10 +294,61 @@ const disconnectGithub = async (req, res) => {
     }
 };
 
+// Save / Connect via Personal Access Token
+const saveGithubToken = async (req, res) => {
+    try {
+        const userId = req.user?.id || req.user?._id;
+        if (!userId) {
+            return res.status(401).json({ error: "Unauthorized user" });
+        }
+
+        const { token } = req.body;
+        if (!token || typeof token !== "string" || !token.trim()) {
+            return res.status(400).json({ error: "GitHub token is required." });
+        }
+
+        const cleanToken = token.trim();
+
+        const userProfileResponse = await fetch("https://api.github.com/user", {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${cleanToken}`,
+                "User-Agent": "ArixelAI-App",
+                Accept: "application/vnd.github+json",
+            },
+        });
+
+        if (!userProfileResponse.ok) {
+            const errData = await userProfileResponse.json().catch(() => ({}));
+            return res.status(400).json({
+                error: errData.message || "Invalid GitHub token. Please verify your token has 'repo' scope and try again.",
+            });
+        }
+
+        const userData = await userProfileResponse.json();
+
+        await User.findByIdAndUpdate(userId, {
+            githubAccessToken: cleanToken,
+            githubUsername: userData.login || "",
+        }, { returnDocument: "after" });
+
+        return res.status(200).json({
+            success: true,
+            connected: true,
+            username: userData.login || null,
+            message: "GitHub connected successfully via Personal Access Token",
+        });
+    } catch (error) {
+        console.error("Error saving GitHub token:", error);
+        return res.status(500).json({ error: "Failed to connect GitHub token" });
+    }
+};
+
 module.exports = {
     getGithubAuthUrl,
     getGithubStatus,
     handleGithubCallback,
     getAccessibleRepositories,
     disconnectGithub,
+    saveGithubToken,
 };

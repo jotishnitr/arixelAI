@@ -95,6 +95,10 @@ const KNOWN_PACKAGE_CORRECTIONS = {
   "font-awesome": "@fortawesome/fontawesome-free",
   "tailwind": "tailwindcss",
   "@tailwind": "tailwindcss",
+  "@tiptap/extension-suggestion": "@tiptap/suggestion",
+  "@tiptap/suggestion": "@tiptap/suggestion",
+  "@tiptap/extension-starter-kit": "@tiptap/starter-kit",
+  "lucide-react-native": "lucide-react",
 };
 
 const PREFERRED_PINS = {
@@ -345,6 +349,18 @@ function scaffoldClientFiles(fileMap, projectName, extraPackages = {}) {
 
   const renamedJsToJsx = new Map();
 
+  const isClientCodeFile = (pathStr) => {
+    const rootConfigs = new Set([
+      "index.html", "package.json", "package-lock.json", "vite.config.js", "vite.config.ts",
+      "tailwind.config.js", "tailwind.config.ts", "postcss.config.js", "postcss.config.mjs",
+      "vercel.json"
+    ]);
+    if (rootConfigs.has(pathStr) || pathStr.startsWith("public/")) {
+      return false;
+    }
+    return true;
+  };
+
   for (const [filePath, content] of fileMap.entries()) {
     if (filePath.startsWith("client/")) {
       const cleanName = filePath.replace(/^client\//, "");
@@ -360,8 +376,11 @@ function scaffoldClientFiles(fileMap, projectName, extraPackages = {}) {
         hasHtml = true;
       }
       let finalName = cleanName;
+      if (isClientCodeFile(cleanName) && !finalName.startsWith("src/")) {
+        finalName = `src/${finalName}`;
+      }
       if (finalName.startsWith("src/") && finalName.endsWith(".js") && !finalName.includes("/ml/") && !finalName.includes("/utils/")) {
-        if (content.includes("</") || /<[A-Za-z0-9_]+\s*(\/?>|[\s\S]*?>)/.test(content)) {
+        if (typeof content === "string" && (content.includes("</") || /<[A-Za-z0-9_]+\s*(\/?>|[\s\S]*?>)/.test(content))) {
           finalName = finalName.replace(/\.js$/, ".jsx");
         }
       }
@@ -370,7 +389,10 @@ function scaffoldClientFiles(fileMap, projectName, extraPackages = {}) {
       }
       let fileContent = content;
       if (typeof fileContent === "string" && (finalName.endsWith(".jsx") || finalName.endsWith(".js") || finalName.endsWith(".tsx"))) {
-        fileContent = fileContent.replace(/(['"])@lucide\/react\1/g, "$1lucide-react$1");
+        fileContent = fileContent
+          .replace(/(['"])@lucide\/react\1/g, "$1lucide-react$1")
+          .replace(/(['"])@tiptap\/extension-suggestion\1/g, "$1@tiptap/suggestion$1")
+          .replace(/(['"])@tiptap\/extension-starter-kit\1/g, "$1@tiptap/starter-kit$1");
       }
       vercelFiles.push({ file: finalName, data: fileContent });
       processedKeys.add(finalName);
@@ -392,8 +414,11 @@ function scaffoldClientFiles(fileMap, projectName, extraPackages = {}) {
           hasHtml = true;
         }
         let finalName = filePath;
+        if (isClientCodeFile(filePath) && !finalName.startsWith("src/")) {
+          finalName = `src/${finalName}`;
+        }
         if (finalName.startsWith("src/") && finalName.endsWith(".js") && !finalName.includes("/ml/") && !finalName.includes("/utils/")) {
-          if (content.includes("</") || /<[A-Za-z0-9_]+\s*(\/?>|[\s\S]*?>)/.test(content)) {
+          if (typeof content === "string" && (content.includes("</") || /<[A-Za-z0-9_]+\s*(\/?>|[\s\S]*?>)/.test(content))) {
             finalName = finalName.replace(/\.js$/, ".jsx");
           }
         }
@@ -402,7 +427,10 @@ function scaffoldClientFiles(fileMap, projectName, extraPackages = {}) {
         }
         let fileContent = content;
         if (typeof fileContent === "string" && (finalName.endsWith(".jsx") || finalName.endsWith(".js") || finalName.endsWith(".tsx"))) {
-          fileContent = fileContent.replace(/(['"])@lucide\/react\1/g, "$1lucide-react$1");
+          fileContent = fileContent
+            .replace(/(['"])@lucide\/react\1/g, "$1lucide-react$1")
+            .replace(/(['"])@tiptap\/extension-suggestion\1/g, "$1@tiptap/suggestion$1")
+            .replace(/(['"])@tiptap\/extension-starter-kit\1/g, "$1@tiptap/starter-kit$1");
         }
         vercelFiles.push({ file: finalName, data: fileContent });
         processedKeys.add(finalName);
@@ -469,6 +497,15 @@ function scaffoldClientFiles(fileMap, projectName, extraPackages = {}) {
       html = html.replace(/src=["'](?:\.\/)?(?:src\/)?main\.(?:jsx?|tsx?)["']/g, 'src="/src/main.jsx"');
     }
     htmlEntry.data = html;
+  }
+
+  // 1.5 Ensure src/App.jsx exists if App component was placed at root
+  const hasAppInSrc = vercelFiles.some((f) => f.file === "src/App.jsx" || f.file === "src/App.tsx" || f.file === "src/App.js");
+  if (!hasAppInSrc) {
+    const rootApp = vercelFiles.find((f) => f.file === "App.jsx" || f.file === "App.tsx" || f.file === "App.js");
+    if (rootApp) {
+      vercelFiles.push({ file: "src/App.jsx", data: rootApp.data });
+    }
   }
 
   // 2. Ensure src/main.jsx exists
@@ -589,6 +626,19 @@ function autoStubMissingImports(filesList) {
   const filePaths = new Set(filesList.map((f) => f.file));
   const newStubs = [];
 
+  const getRelativeImportPath = (fromFilePath, toFilePath) => {
+    const fromDir = fromFilePath.includes("/") ? fromFilePath.substring(0, fromFilePath.lastIndexOf("/")) : "";
+    const fromParts = fromDir ? fromDir.split("/").filter(Boolean) : [];
+    const toParts = toFilePath.split("/").filter(Boolean);
+    let commonLen = 0;
+    while (commonLen < fromParts.length && commonLen < toParts.length && fromParts[commonLen] === toParts[commonLen]) {
+      commonLen++;
+    }
+    const upSteps = fromParts.length - commonLen;
+    const downParts = toParts.slice(commonLen);
+    return (upSteps > 0 ? "../".repeat(upSteps) : "./") + downParts.join("/").replace(/\.(jsx?|tsx?)$/, "");
+  };
+
   for (const f of filesList) {
     if (!f.file.endsWith(".jsx") && !f.file.endsWith(".js") && !f.file.endsWith(".tsx")) continue;
     const content = f.data;
@@ -658,6 +708,23 @@ function autoStubMissingImports(filesList) {
           ? (target.endsWith(".js") ? target : `${target}.js`)
           : (target.endsWith(".jsx") ? target : `${target}.jsx`);
 
+        const baseName = target.split("/").pop().replace(/\.(jsx?|tsx?)$/, "");
+        const existingEntry = filesList.find((entry) => {
+          if (!entry.file.endsWith(".jsx") && !entry.file.endsWith(".js") && !entry.file.endsWith(".tsx")) return false;
+          const eBase = entry.file.split("/").pop().replace(/\.(jsx?|tsx?)$/, "");
+          return eBase.toLowerCase() === baseName.toLowerCase() && entry.file !== stubPath;
+        });
+
+        if (existingEntry) {
+          if (!filePaths.has(stubPath)) {
+            filePaths.add(stubPath);
+            const relTarget = getRelativeImportPath(stubPath, existingEntry.file);
+            const forwardCode = `// Forwarding alias to actual implementation in ${existingEntry.file}\nexport * from '${relTarget}';\nexport { default } from '${relTarget}';\n`;
+            newStubs.push({ file: stubPath, data: forwardCode });
+            continue;
+          }
+        }
+
         if (!filePaths.has(stubPath)) {
           filePaths.add(stubPath);
           let stubCode = "";
@@ -705,6 +772,23 @@ function autoStubMissingImports(filesList) {
         const stubPath = isModule
           ? (target.endsWith(".js") ? target : `${target}.js`)
           : (target.endsWith(".jsx") ? target : `${target}.jsx`);
+
+        const baseName = target.split("/").pop().replace(/\.(jsx?|tsx?)$/, "");
+        const existingEntry = filesList.find((entry) => {
+          if (!entry.file.endsWith(".jsx") && !entry.file.endsWith(".js") && !entry.file.endsWith(".tsx")) return false;
+          const eBase = entry.file.split("/").pop().replace(/\.(jsx?|tsx?)$/, "");
+          return eBase.toLowerCase() === baseName.toLowerCase() && entry.file !== stubPath;
+        });
+
+        if (existingEntry) {
+          if (!filePaths.has(stubPath)) {
+            filePaths.add(stubPath);
+            const relTarget = getRelativeImportPath(stubPath, existingEntry.file);
+            const forwardCode = `// Forwarding alias to actual implementation in ${existingEntry.file}\nexport * from '${relTarget}';\nexport { default } from '${relTarget}';\n`;
+            newStubs.push({ file: stubPath, data: forwardCode });
+            continue;
+          }
+        }
 
         if (!filePaths.has(stubPath)) {
           filePaths.add(stubPath);
@@ -1090,7 +1174,11 @@ async function createGitHubRepoAndPush({ token, repoName, fileMap, description =
     }
 
     if (!repoRes.ok) {
-      throw new Error(repoData.message || `Failed to create GitHub repo: status ${repoRes.status}`);
+      let errMsg = repoData.message || `Failed to create GitHub repo: status ${repoRes.status}`;
+      if (repoRes.status === 403 && errMsg.includes("Resource not accessible by integration")) {
+        errMsg = "Resource not accessible by integration. Your GitHub token lacks repository creation rights. If using a GitHub App, ensure 'Administration: Read and write' & 'Contents: Read and write' permissions are enabled and accepted. Or connect using a Personal Access Token / OAuth App with 'repo' scope.";
+      }
+      throw new Error(errMsg);
     }
 
     const owner = repoData.owner?.login;
