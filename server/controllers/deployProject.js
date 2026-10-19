@@ -41,7 +41,8 @@ const handleDeployProject = async (req, res) => {
       if (relativePath.includes(".git/") || relativePath.includes("node_modules/")) continue;
 
       const content = await entry.async("string");
-      fileMap.set(relativePath, content);
+      const cleanPath = relativePath.replace(/\\/g, "/").replace(/^\.?\/+/, "");
+      fileMap.set(cleanPath, content);
     }
 
     if (fileMap.size === 0) {
@@ -55,9 +56,11 @@ const handleDeployProject = async (req, res) => {
     if (platform === "vercel") {
       const vercelResult = await deployToVercel(cleanProjectName, fileMap);
       if (!vercelResult.success) {
+        console.error("[deployProject] Vercel build failed:", vercelResult.error, vercelResult.buildLog);
         return res.status(500).json({
           success: false,
-          error: vercelResult.error || "Failed to deploy frontend to Vercel.",
+          error: vercelResult.buildLog ? `Vercel build failed:\n${vercelResult.buildLog.slice(-300)}` : (vercelResult.error || "Failed to deploy frontend to Vercel."),
+          buildLog: vercelResult.buildLog,
         });
       }
 

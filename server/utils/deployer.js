@@ -106,6 +106,13 @@ const PREFERRED_PINS = {
   axios: "^1.7.7",
   "framer-motion": "^11.5.4",
   "canvas-confetti": "^1.9.3",
+  "@tiptap/core": "^2.6.6",
+  "@tiptap/react": "^2.6.6",
+  "@tiptap/starter-kit": "^2.6.6",
+  "@tiptap/pm": "^2.6.6",
+  "@tiptap/extension-collaboration": "^2.6.6",
+  "@tiptap/extension-collaboration-cursor": "^2.6.6",
+  "@tiptap/suggestion": "^2.6.6",
 };
 
 const NODE_BUILTINS = new Set([
@@ -256,6 +263,11 @@ function prepareClientPackageJson(rawStr, projectName, extraPackages = {}) {
     ...extraPackages,
     ...cleanedModelDeps,
   };
+
+  // If any @tiptap package is used, ensure @tiptap/pm is included to prevent build crashes
+  if (Object.keys(mergedDeps).some((k) => k.startsWith("@tiptap/")) && !mergedDeps["@tiptap/pm"]) {
+    mergedDeps["@tiptap/pm"] = "^2.6.6";
+  }
 
   const mergedDevDeps = {
     "@vitejs/plugin-react": "^4.3.1",
@@ -565,6 +577,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   if (!processedKeys.has("tailwind.config.js") && !processedKeys.has("tailwind.config.ts")) {
     vercelFiles.push({ file: "tailwind.config.js", data: STANDARD_TAILWIND_CONFIG });
   }
+  vercelFiles.push({ file: ".npmrc", data: "legacy-peer-deps=true\n" });
   vercelFiles.push({ file: "vercel.json", data: STANDARD_VERCEL_JSON });
 
   return autoStubMissingImports(vercelFiles);
@@ -931,6 +944,7 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
       target: "production",
       projectSettings: {
         framework: "vite",
+        installCommand: "npm install --legacy-peer-deps",
         buildCommand: "npm run build",
         outputDirectory: "dist",
       },
@@ -979,6 +993,7 @@ async function deployToVercel(projectName, fileMap, envVars = {}) {
     if (!ready.ok) {
       const logLines = (ready.log || "").split("\n");
       const last150Log = logLines.length > 150 ? logLines.slice(-150).join("\n") : (ready.log || "");
+      console.error("[deployer] Vercel build failed. Log:\n", last150Log);
       return {
         success: false,
         error: "Vercel build failed",
