@@ -130,15 +130,16 @@ export default function Chatarea({
   const optimizerInfoRef = useRef(null);
 
   // Project Deployment state
-  const [deployStatus, setDeployStatus] = useState({}); // { [msgIndex]: { loading, platform, url, repoUrl, renderUrl, error } }
+  const [deployStatus, setDeployStatus] = useState({}); // { [msgIndex]: { loading, platform, url, repoUrl, renderUrl, error, guide, renderError, renderGuide } }
   const [activeDeployModal, setActiveDeployModal] = useState(null); // { msgIndex, attachment, context }
+  const [copiedDeployIndex, setCopiedDeployIndex] = useState(null);
 
   const handleTriggerDeploy = async (msgIndex, attachment, platform = "vercel") => {
     if (!attachment?.base64) return;
 
     setDeployStatus((prev) => ({
       ...prev,
-      [msgIndex]: { loading: true, platform, error: null, url: null, repoUrl: null, renderUrl: null },
+      [msgIndex]: { loading: true, platform, error: null, url: null, repoUrl: null, renderUrl: null, guide: null, renderError: null, renderGuide: null },
     }));
 
     try {
@@ -168,6 +169,9 @@ export default function Chatarea({
             repoUrl: data.repoUrl || data.renderRepoUrl,
             renderUrl: data.renderUrl,
             error: null,
+            renderError: data.renderError || null,
+            renderGuide: data.renderGuide || null,
+            guide: null,
           },
         }));
       } else {
@@ -178,12 +182,23 @@ export default function Chatarea({
             : data.vercelError || data.renderError) ||
           "Deployment failed to return a live URL. Please check your credentials.";
 
+        const resolvedGuide =
+          data.guide ||
+          (platform === "render" ? data.renderGuide : data.vercelGuide) ||
+          data.renderGuide ||
+          data.vercelGuide ||
+          null;
+
         setDeployStatus((prev) => ({
           ...prev,
           [msgIndex]: {
             loading: false,
             platform,
             error: errorDetail,
+            repoUrl: data.repoUrl || data.renderRepoUrl || null,
+            guide: resolvedGuide,
+            renderError: data.renderError || null,
+            renderGuide: data.renderGuide || null,
             url: null,
           },
         }));
@@ -197,6 +212,19 @@ export default function Chatarea({
           loading: false,
           platform,
           error: "Could not reach deployment server. Please verify your connection.",
+          guide: platform === "render" ? [
+            "Download your project zip archive from the attachment button above.",
+            "Push the code to your GitHub account repository.",
+            "Go to https://dashboard.render.com → '+ New' → 'Web Service'.",
+            "Select your repository, set Root Directory: 'server', Build Command: 'npm install', Start Command: 'npm start'.",
+            "Choose Free plan ($0/mo) and click 'Deploy Web Service'!"
+          ] : [
+            "Download the project zip archive from the attachment button above and unzip it.",
+            "In your terminal, navigate to the 'client' folder and test locally with 'npm install && npm run build'.",
+            "Go to https://vercel.com/new and import your repository (or run 'npx vercel' in the client folder).",
+            "Framework: 'Vite', Root Directory: 'client', Build Command: 'npm run build', Output: 'dist'.",
+            "Click 'Deploy' to get your instant live website!"
+          ],
           url: null,
         },
       }));
@@ -946,15 +974,105 @@ export default function Chatarea({
                             </div>
                           ) : deployStatus[index].error ? (
                             <div className="deploy-banner-content error">
-                              <span className="deploy-error-icon">⚠️</span>
-                              <span className="deploy-error-text">{deployStatus[index].error}</span>
-                              <button
-                                type="button"
-                                className="deploy-retry-btn"
-                                onClick={() => setActiveDeployModal({ msgIndex: index, attachment: msg.attachment, context })}
-                              >
-                                Retry
-                              </button>
+                              <div className="deploy-error-header-row">
+                                <div className="deploy-error-text-wrap">
+                                  <span className="deploy-error-icon">⚠️</span>
+                                  <span className="deploy-error-text">{deployStatus[index].error}</span>
+                                </div>
+                                <div className="deploy-error-actions">
+                                  <button
+                                    type="button"
+                                    className="deploy-retry-btn"
+                                    onClick={() => setActiveDeployModal({ msgIndex: index, attachment: msg.attachment, context })}
+                                  >
+                                    🔄 Retry
+                                  </button>
+                                </div>
+                              </div>
+
+                              {deployStatus[index].repoUrl && (
+                                <div className="deploy-banner-links-row">
+                                  <a
+                                    href={deployStatus[index].repoUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="deploy-link-btn github"
+                                  >
+                                    📂 Open Created GitHub Repository
+                                  </a>
+                                </div>
+                              )}
+
+                              {/* Manual Deployment Process Guide */}
+                              <div className="deploy-guide-container">
+                                <div className="deploy-guide-topbar">
+                                  <span className="deploy-guide-heading">
+                                    📋 Manual Deployment Process:
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="deploy-guide-copy-btn"
+                                    onClick={() => {
+                                      const steps = (deployStatus[index].guide || []).join("\n");
+                                      const fullGuide = `Manual Deployment Process (${deployStatus[index].platform === "render" ? "Render" : "Vercel"}):\n${steps}`;
+                                      if (navigator?.clipboard?.writeText) {
+                                        navigator.clipboard.writeText(fullGuide);
+                                        setCopiedDeployIndex(index);
+                                        setTimeout(() => setCopiedDeployIndex(null), 2000);
+                                      }
+                                    }}
+                                  >
+                                    {copiedDeployIndex === index ? "✓ Steps Copied" : "📋 Copy Steps"}
+                                  </button>
+                                </div>
+
+                                <ol className="deploy-guide-steps-list">
+                                  {(deployStatus[index].guide && deployStatus[index].guide.length > 0
+                                    ? deployStatus[index].guide
+                                    : [
+                                        "Download the project zip archive from the attachment button above.",
+                                        deployStatus[index].platform === "render"
+                                          ? "Push the server code to your GitHub repository."
+                                          : "Open terminal in the 'client' directory and run 'npm install && npm run build'.",
+                                        deployStatus[index].platform === "render"
+                                          ? "Open https://dashboard.render.com → '+ New' → 'Web Service' and link your repository."
+                                          : "Go to https://vercel.com/new and import your project repository.",
+                                        deployStatus[index].platform === "render"
+                                          ? "Configure: Root Directory = 'server', Build Command = 'npm install', Start Command = 'npm start'."
+                                          : "Configure: Framework = 'Vite', Root Directory = 'client', Build = 'npm run build', Output = 'dist'.",
+                                        "Deploy your service live on the free tier!"
+                                      ]
+                                  ).map((step, sIdx) => (
+                                    <li key={sIdx} className="deploy-guide-step-item">
+                                      <span className="deploy-guide-step-num">{sIdx + 1}</span>
+                                      <span className="deploy-guide-step-text">{step}</span>
+                                    </li>
+                                  ))}
+                                </ol>
+
+                                <div className="deploy-guide-dashboards">
+                                  {deployStatus[index].platform !== "vercel" && (
+                                    <a
+                                      href="https://dashboard.render.com"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="deploy-guide-portal-btn render"
+                                    >
+                                      🌐 Go to Render Dashboard
+                                    </a>
+                                  )}
+                                  {deployStatus[index].platform !== "render" && (
+                                    <a
+                                      href="https://vercel.com/new"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="deploy-guide-portal-btn vercel"
+                                    >
+                                      ▲ Go to Vercel Dashboard
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           ) : (
                             <div className="deploy-banner-content success">
@@ -993,6 +1111,42 @@ export default function Chatarea({
                                   </a>
                                 )}
                               </div>
+
+                              {deployStatus[index].renderError && (
+                                <div className="deploy-partial-card">
+                                  <div className="deploy-partial-header">
+                                    <span className="deploy-partial-icon">⚠️</span>
+                                    <span className="deploy-partial-title">
+                                      Backend Notice: {deployStatus[index].renderError}
+                                    </span>
+                                  </div>
+                                  {deployStatus[index].renderGuide && (
+                                    <div className="deploy-guide-container mini">
+                                      <span className="deploy-guide-heading">
+                                        📋 Manual Backend Deployment Process (Render):
+                                      </span>
+                                      <ol className="deploy-guide-steps-list">
+                                        {deployStatus[index].renderGuide.map((step, sIdx) => (
+                                          <li key={sIdx} className="deploy-guide-step-item">
+                                            <span className="deploy-guide-step-num">{sIdx + 1}</span>
+                                            <span className="deploy-guide-step-text">{step}</span>
+                                          </li>
+                                        ))}
+                                      </ol>
+                                      <div className="deploy-guide-dashboards">
+                                        <a
+                                          href="https://dashboard.render.com"
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="deploy-guide-portal-btn render"
+                                        >
+                                          🌐 Open Render Dashboard
+                                        </a>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

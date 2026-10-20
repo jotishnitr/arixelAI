@@ -1945,9 +1945,10 @@ ${hasClient ? `2. Setup and run Frontend:
           console.warn("[chatResponse] GitHub token not available; skipping Render deployment.");
           finalResponse += "\n\n---\n\nℹ️ **Backend Deployment Skipped**: GitHub account is not connected. Connect your GitHub account in settings to automatically deploy backend services.";
         } else {
+          let ghResult = null;
           try {
             console.log(`[chatResponse] Creating GitHub repository for backend "${activeProjectSlug}"...`);
-            const ghResult = await createGitHubRepoAndPush({
+            ghResult = await createGitHubRepoAndPush({
               token: githubToken,
               repoName: `${activeProjectSlug}-backend`,
               fileMap: activeFileMap,
@@ -1973,7 +1974,12 @@ ${hasClient ? `2. Setup and run Frontend:
             finalResponse += `\n\n---\n\n⚙️ **Backend Service Live**: Your backend has been deployed on Render!\n🔗 **Service URL**: [${backendServiceUrl}](${backendServiceUrl})${renderResult.warming ? " *(service is starting up)*" : ""}`;
           } catch (backendDeployErr) {
             console.warn("[chatResponse] Render backend deployment failed:", backendDeployErr.message);
-            finalResponse += `\n\n---\n\n⚠️ **Backend Deployment Failed**: ${backendDeployErr.message}. Continuing with frontend deployment only.`;
+            finalResponse += `\n\n---\n\n⚠️ **Backend Deployment Failed**: ${backendDeployErr.message}. Continuing with frontend deployment.`;
+            if (ghResult?.repoUrl) {
+              finalResponse += `\n\n> 📦 **GitHub Repository Ready**: [${ghResult.repoUrl}](${ghResult.repoUrl})\n>\n> **Manual Deployment Steps (Free on Render)**:\n> 1. Open [dashboard.render.com](https://dashboard.render.com) and click **New +** → **Web Service**.\n> 2. Connect your repository: \`${ghResult.repoUrl}\`.\n> 3. Configure build settings:\n>    - **Root Directory**: \`server\`\n>    - **Build Command**: \`npm install\`\n>    - **Start Command**: \`npm start\`\n>    - **Instance Type**: **Free** ($0/mo)\n> 4. Click **Deploy Web Service** to launch your backend!`;
+            } else {
+              finalResponse += `\n\n> 🛠️ **Manual Deployment Steps (Backend)**:\n> 1. Download your project files via the attachment button above.\n> 2. Push the files to a repository on your GitHub.\n> 3. Open [dashboard.render.com](https://dashboard.render.com) → **New +** → **Web Service**.\n> 4. Select your repository, set **Root Directory**: \`server\`, **Build Command**: \`npm install\`, **Start Command**: \`npm start\`.\n> 5. Click **Deploy Web Service** to launch live on the free tier!`;
+            }
           }
         }
       }
@@ -2139,7 +2145,7 @@ Return ONLY full corrected files, each labeled with exact path as ### \`path\` f
         console.warn("[chatResponse] Vercel deploy error:", vercelResult.error);
         const logLines = (vercelResult.buildLog || "").split("\n").filter(Boolean);
         const snippet = logLines.length > 20 ? logLines.slice(-20).join("\n") : (vercelResult.buildLog || vercelResult.error || "Deployment failed");
-        finalResponse += `\n\n---\n\n⚠️ **Live Deployment Failed**: ${vercelResult.error || "Build error"}\n<details><summary>Build Log (Last 20 lines)</summary>\n\n\`\`\`\n${snippet}\n\`\`\`\n</details>`;
+        finalResponse += `\n\n---\n\n⚠️ **Live Frontend Deployment Failed**: ${vercelResult.error || "Build error"}\n<details><summary>Build Log (Last 20 lines)</summary>\n\n\`\`\`\n${snippet}\n\`\`\`\n</details>\n\n> 🛠️ **Manual Frontend Deployment Steps (Vercel)**:\n> 1. Download the project zip archive from the attachment button above and unzip it.\n> 2. In your terminal, navigate into the \`client\` folder and test locally with \`npm install && npm run build\`.\n> 3. Go to [vercel.com/new](https://vercel.com/new) and import your project, or run \`npx vercel\` inside \`client\`.\n> 4. Set **Framework Preset**: \`Vite\`, **Root Directory**: \`client\`, **Build Command**: \`npm run build\`, **Output Directory**: \`dist\`.\n> 5. Click **Deploy** to publish your live website!`;
       }
     }
 

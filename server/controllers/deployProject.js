@@ -52,6 +52,28 @@ const handleDeployProject = async (req, res) => {
       });
     }
 
+const getRenderDeployGuide = (repoUrl) => [
+  repoUrl
+    ? `Your repository is ready on GitHub: ${repoUrl}`
+    : "Download the project zip archive from the attachment button above and push it to GitHub.",
+  "Go to https://dashboard.render.com and sign in.",
+  "Click '+ New' in the top right → select 'Web Service'.",
+  repoUrl
+    ? `Select your repository (${repoUrl}) from the list.`
+    : "Connect your GitHub account and choose the project repository.",
+  "Configure service settings:\n   • Root Directory: server\n   • Build Command: npm install\n   • Start Command: npm start\n   • Instance Type: Free ($0/mo)",
+  "Click 'Create Web Service' to deploy live on Render!"
+];
+
+const getVercelDeployGuide = () => [
+  "Download the project zip file using the attachment download button and unzip it.",
+  "Open terminal inside the 'client' directory and run 'npm install && npm run build' to test locally.",
+  "Go to https://vercel.com/new and import your GitHub repository (or run 'npx vercel' in the 'client' folder).",
+  "Set Framework Preset to 'Vite' and Root Directory to 'client'.",
+  "Build Command: 'npm run build' | Output Directory: 'dist'.",
+  "Click 'Deploy' to get your instant live frontend URL!"
+];
+
     // 2. Execute platform deployment
     if (platform === "vercel") {
       const vercelResult = await deployToVercel(cleanProjectName, fileMap);
@@ -61,6 +83,8 @@ const handleDeployProject = async (req, res) => {
           success: false,
           error: vercelResult.buildLog ? `Vercel build failed:\n${vercelResult.buildLog.slice(-300)}` : (vercelResult.error || "Failed to deploy frontend to Vercel."),
           buildLog: vercelResult.buildLog,
+          guide: getVercelDeployGuide(),
+          platform: "vercel",
         });
       }
 
@@ -83,6 +107,8 @@ const handleDeployProject = async (req, res) => {
           success: false,
           error:
             "GitHub account not linked. Render requires a GitHub repository to build backend services. Please connect GitHub using the button in the chat header first.",
+          guide: getRenderDeployGuide(null),
+          platform: "render",
         });
       }
 
@@ -98,6 +124,8 @@ const handleDeployProject = async (req, res) => {
         return res.status(500).json({
           success: false,
           error: `Failed to create GitHub repository: ${repoResult.error}`,
+          guide: getRenderDeployGuide(null),
+          platform: "render",
         });
       }
 
@@ -113,6 +141,8 @@ const handleDeployProject = async (req, res) => {
           success: false,
           repoUrl: repoResult.repoUrl,
           error: `GitHub repository created at ${repoResult.repoUrl}, but Render deployment failed: ${renderResult.error}`,
+          guide: getRenderDeployGuide(repoResult.repoUrl),
+          platform: "render",
         });
       }
 
@@ -149,6 +179,9 @@ const handleDeployProject = async (req, res) => {
               repoResult.repoUrl,
               fileMap.has("server/package.json") ? "server" : ""
             );
+            if (!renderResult.success) {
+              renderError = renderResult.error;
+            }
           } else {
             renderError = repoResult.error;
           }
@@ -169,6 +202,10 @@ const handleDeployProject = async (req, res) => {
           error: errorMsg || "Both Vercel and Render deployments failed. Please check credentials.",
           vercelError: vercelResult.error,
           renderError: renderError,
+          repoUrl: repoResult?.repoUrl || null,
+          vercelGuide: getVercelDeployGuide(),
+          renderGuide: getRenderDeployGuide(repoResult?.repoUrl),
+          guide: renderError ? getRenderDeployGuide(repoResult?.repoUrl) : getVercelDeployGuide(),
         });
       }
 
@@ -178,10 +215,12 @@ const handleDeployProject = async (req, res) => {
         url: vercelResult.success ? vercelResult.url : null,
         vercelUrl: vercelResult.success ? vercelResult.url : null,
         vercelError: vercelResult.success ? null : vercelResult.error,
+        vercelGuide: vercelResult.success ? null : getVercelDeployGuide(),
         renderUrl: renderResult?.success ? renderResult.serviceUrl : null,
         repoUrl: repoResult?.success ? repoResult.repoUrl : null,
         renderRepoUrl: repoResult?.success ? repoResult.repoUrl : null,
         renderError: renderError || (renderResult && !renderResult.success ? renderResult.error : null),
+        renderGuide: renderResult?.success ? null : getRenderDeployGuide(repoResult?.repoUrl),
         message: "Deployment process executed.",
       });
 
